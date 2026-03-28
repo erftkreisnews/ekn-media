@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+[x-cloak] { display: none !important; }
+
+/* Artikel-Body: Bilder und eingebettete Medien vollständig sichtbar */
+.article-body img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+}
+.article-body figure,
+.article-body p {
+    max-width: 100%;
+}

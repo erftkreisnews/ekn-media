@@ -1,0 +1,113 @@
+================================================================================
+  ERFTKREIS NEWS / Laravel – Test- & Abnahme-Checkliste
+================================================================================
+Stand: 2026-03-18
+Hinweis: E-Mail-Versand ist bewusst NICHT Teil dieser Liste (funktioniert bei euch).
+
+--------------------------------------------------------------------------------
+A) Automatisierte Tests (auf dem Server im Projektordner ausführen)
+--------------------------------------------------------------------------------
+  Befehl:
+    cd /usr/home/admin/public_html/media/laravel12
+    ./vendor/bin/phpunit
+
+  Erwartung: „OK (… tests, … assertions)“ ohne Fehler.
+
+  Letzter Lauf in dieser Umgebung: 55 Tests, 144 Assertions – alle grün.
+
+--------------------------------------------------------------------------------
+B) Basis / Deployment
+--------------------------------------------------------------------------------
+  [ ] APP_URL in .env = öffentliche HTTPS-URL der Seite
+  [ ] php artisan config:clear && php artisan config:cache (nach .env-Änderung)
+  [ ] php artisan route:cache (optional, nach Route-Änderungen)
+  [ ] Queue-Worker läuft (falls Jobs/AI/Redaction/Upload-Pipeline): 
+        php artisan queue:work (oder Supervisor/systemd)
+  [ ] Cron für Laravel Scheduler (falls genutzt): * * * * * php artisan schedule:run
+
+--------------------------------------------------------------------------------
+C) Öffentliche Website (ohne Login)
+--------------------------------------------------------------------------------
+  [ ] Startseite / lädt, keine 500er-Fehler
+  [ ] News-Liste: Meldungen sichtbar, Teaser-Bilder laden (S3 oder /storage)
+  [ ] Einzelne News-URL /news/{slug}: Text, Bilder, Video/Audio wie erwartet
+  [ ] Canonical / Meta robots plausibel (Seitenquelltext kurz prüfen)
+  [ ] robots.txt / sitemap.xml erreichbar (falls aktiv)
+
+--------------------------------------------------------------------------------
+D) Anmeldung & Rechte
+--------------------------------------------------------------------------------
+  [ ] Login mit lokalem Konto (E-Mail + Passwort)
+  [ ] Optional: „Mit Microsoft anmelden“ (falls genutzt)
+  [ ] Geschützte Admin-URL ohne Login → Redirect zur Anmeldung
+  [ ] Admin-Bereich nur mit Rolle/Berechtigung (permission:access_admin)
+
+--------------------------------------------------------------------------------
+E) Admin – Nachrichten (News)
+--------------------------------------------------------------------------------
+  [ ] /admin/news – Liste lädt ohne Fehler
+  [ ] Neue Nachricht anlegen, speichern, wieder öffnen
+  [ ] Nachricht bearbeiten (Titel, Text, Status, Veröffentlichung)
+  [ ] Bild hochladen (Admin-Formular): erscheint in der Meldung, Vorschau/Thumb
+  [ ] Video/Audio hochladen: Metadaten/Poster nach Queue-Lauf prüfen
+  [ ] Einzelnes Medium löschen (falls vorhanden) – Dateien in S3 entfernt
+  [ ] Nachricht komplett löschen – Objekte im Bucket zu dieser Meldung weg
+  [ ] Medien-Bearbeitung (Caption, Sichtbarkeit, Versand-Flag) speichern
+
+--------------------------------------------------------------------------------
+F) Admin – Medien / KI / Redaction (falls aktiviert)
+--------------------------------------------------------------------------------
+  [ ] Bild-Metadaten bearbeiten (IPTC-Schreiben nur wenn lokal/S3-Workflow passt)
+  [ ] Redaction/„Unkenntlich“: Job läuft, redigierte Version wird genutzt
+  [ ] KI-Vorschlag für Bild (falls OPENAI_API_KEY gesetzt): Status in UI
+
+--------------------------------------------------------------------------------
+G) Delivery (signierte Links) – manuell
+--------------------------------------------------------------------------------
+  [ ] Aus Admin: Versand zu Test-E-Mail vorbereiten (oder bestehenden Test-Link)
+  [ ] Link öffnen (Token-URL): Medienpaket-Seite lädt
+  [ ] Download einer freigegebenen Datei: Download startet, kein 404
+  [ ] Nach Download: Eintrag in Aktivitäts-/Event-Log plausibel (Admin)
+  [ ] Abgelaufener/widerrufener Link → 410 wie vorgesehen
+
+--------------------------------------------------------------------------------
+H) Backoffice / Usage / Billing (je nach Nutzung)
+--------------------------------------------------------------------------------
+  [ ] Nutzungs-Einträge anlegen/bearbeiten (falls genutzt)
+  [ ] Nutzung löschen (DELETE) – Funktion vorhanden, Redirect/Meldung
+  [ ] Rechnung/Export nur stichprobenartig (komplex; keine Pflicht für Smoke-Test)
+
+--------------------------------------------------------------------------------
+I) Einstellungen / Backup / System
+--------------------------------------------------------------------------------
+  [ ] /admin/settings/backup – Pfad/Anzeige konsistent, manueller Backup-Test optional
+  [ ] backup:run in Scheduler (täglich) – schedule:list prüfen
+  [ ] SEO-Einstellungen (Google etc.) nur bei Bedarf
+
+--------------------------------------------------------------------------------
+J) Speicher S3 (Hetzner Object Storage)
+--------------------------------------------------------------------------------
+  [ ] Neue Uploads landen im konfigurierten Bucket (Pfad news-media/…)
+  [ ] Öffentliche URLs oder Presigned-URLs (je nach Konfiguration) funktionieren
+  [ ] Nach Löschen Meldung/Medium: keine „Leichen“ im Bucket (Stichprobe)
+
+--------------------------------------------------------------------------------
+K) Performance / Fehlerlog
+--------------------------------------------------------------------------------
+  [ ] storage/logs/laravel.log nach den Tests: keine neuen kritischen Fehler
+  [ ] Browser-Konsole auf Startseite + News: keine roten JS-Fehler (Stichprobe)
+
+--------------------------------------------------------------------------------
+L) Nicht testen (laut Vorgabe)
+--------------------------------------------------------------------------------
+  • E-Mail-Versand (SMTP, Benachrichtigungen) – bei euch ok, hier ausgelassen.
+
+================================================================================
+  Kurz-Befehle (Referenz)
+================================================================================
+  Tests:     cd …/media/laravel12 && ./vendor/bin/phpunit
+  Routes:    php artisan route:list
+  Queue:     php artisan queue:work
+  Schedule:  php artisan schedule:list
+
+================================================================================

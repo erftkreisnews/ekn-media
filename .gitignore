@@ -1,0 +1,41 @@
+# Laravel Core
+/vendor
+/node_modules
+/public/hot
+/public/storage
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs & Cache
+/storage/*.key
+/storage/app/*
+!/storage/app/.gitignore
+/storage/framework/*
+!/storage/framework/.gitignore
+/storage/logs/*
+!/storage/logs/.gitignore
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+.phpunit.result.cache
+
+# Build Artefacts
+/public/build
+
+# Ingest / Upload (KRITISCH)
+upload/
+
+# Fremdprojekte / Altbestände (KRITISCH)
+lave hetzner neu/
+
+# Temporäre Dateien
+*.bak
+*.swp
+*.swo
+
+# Optional (nur wenn gewünscht)
+# *.pdf
+# docs/tmp/

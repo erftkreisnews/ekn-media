@@ -1,0 +1,7 @@
+../../data/**
+../data/**
+data/**
+vendor/**
+node_modules/**
+storage/logs/**
+bootstrap/cache/**

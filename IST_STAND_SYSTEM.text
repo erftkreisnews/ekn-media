@@ -1,0 +1,217 @@
+IST-STAND SYSTEM (Laravel)
+Projekt: Erftkreis News Media
+Stand: 2026-03-04
+Pfad: /usr/home/admin/public_html/media/laravel12
+
+============================================================
+1) SYSTEMUEBERBLICK
+============================================================
+- Framework: Laravel 12
+- Schwerpunkt: News-/Medienportal mit Admin-Backoffice, Versand, Delivery-Tracking und Abrechnung
+- Rollen/Rechte:
+  - access_admin: Zugriff auf /admin
+  - view_customer_area: Zugriff auf /kunden
+- Hauptmodule:
+  - Oeffentliche News-Seiten
+  - Admin-News-Redaktion inkl. Medienverwaltung
+  - Delivery-System (E-Mail + FTP/SFTP)
+  - Backoffice (Kunden, Produkte, Kontakte, Usage, Billing)
+  - Settings (SEO, Backup, AI, Jobs)
+
+============================================================
+2) OEFFENTLICHE FUNKTIONEN
+============================================================
+Routen (web):
+- GET /                                -> NewsController@index
+- GET /news/{slug}                     -> NewsController@show
+- GET /robots.txt                      -> SitemapController@robots
+- GET /sitemap.xml                     -> SitemapController@index
+- GET /sitemap-news.xml                -> SitemapController@newsSitemap
+- GET /d/{token}                       -> DeliveryController@show
+- POST /d/{token}/confirm              -> DeliveryController@confirm
+- GET /d/{token}/m/{media}             -> DeliveryController@download
+
+Features:
+- News-Liste mit Suche ueber q-Parameter
+- Artikel-Detailseite mit SEO-Meta, OG, JSON-LD, Galerie/Lightbox
+- Canonical-/Robots-Logik im Frontend-Layout + X-Robots-Header per Middleware
+- Sitemap + Google-News-Sitemap
+- Signed-Delivery-Links mit Ablauf/Widerruf, Downloadtracking und Aktivitaetsprotokoll
+- Medienpaket-Download (/d/{token}/m/{media}): Auslieferung verbindlich der Originaldatei
+  (news_item_media.path), nicht Preview/Thumb/Poster/Redaction; Vorschau in der UI bleibt
+  getrennt (public_url / preview_url). Logik: NewsItemMedia::resolveDeliveryDownloadRelativePath()
+
+============================================================
+3) AUTH UND BENUTZERBEREICH
+============================================================
+Auth-Routen (routes/auth.php):
+- login, forgot-password, reset-password, verify-email, confirm-password, logout
+- Microsoft OAuth:
+  - GET /auth/microsoft/redirect
+  - GET /auth/microsoft/callback
+
+Nach Login:
+- GET /dashboard (Admin wird auf /admin umgeleitet)
+- GET/PATCH/DELETE /profile
+
+Kundenbereich:
+- GET /kunden (permission:view_customer_area)
+
+============================================================
+4) ADMIN-BEREICH (KERNFUNKTIONEN)
+============================================================
+Dashboard:
+- GET /admin
+
+News-Management:
+- Liste, Erstellen, Bearbeiten, Loeschen von News
+- Medien-Uploads (Bild/Video/Audio), Sichtbarkeit, Versand-Flag, Teaserbild
+- Bild-Metadaten (Titel/Fotograf/Caption), Preview-Generierung
+- Redaction/Unkenntlich (manuell + AI-gestuetzt)
+- Video-/Audio-Metadaten-Extraktion
+
+News-Versand:
+- Versand vorbereiten (Empfaenger aus DeliveryDestination/Contacts)
+- E-Mail-Versand via NewsDeliveryMail mit signiertem Delivery-Link
+- FTP/SFTP-Queue und Upload-Run
+- Versand-Zusammenfassung und Run-Status
+
+Admin-Listen:
+- /admin/video
+- /admin/audio
+- /admin/deliveries (+ Aktivitaet)
+
+============================================================
+5) BACKOFFICE-FUNKTIONEN
+============================================================
+Backoffice Start:
+- /admin/backoffice
+
+Benutzer:
+- /admin/backoffice/users (+ edit/update/delete)
+
+Kundenstamm:
+- Kunden (organizations), Produkte, Kontakte
+- Versandziele je Produkt bzw. je Kunde (DeliveryDestination)
+- Redirects fuer Legacy/Leer-Segmente in Admin-URLs vorhanden
+
+Usage / Nutzungsnachweise:
+- /admin/backoffice/usage (index/create/edit/update/delete)
+- Erfassung von:
+  - News-Bezug
+  - Medienhaus/Produkt
+  - Mengen (Bilder/Videominuten)
+  - Preise
+  - Nachweis-URL
+- Loeschen im Edit-Form vorhanden
+
+Billing / Rechnungen:
+- Rechnungsliste, Entwurfserstellung, Detailansicht
+- PDF, ZUGFeRD, Lexware-Datei
+- Rechnungsversand
+- Statuswechsel (ready-for-lexware/release)
+
+============================================================
+6) SETTINGS-FUNKTIONEN
+============================================================
+SEO:
+- Search Console Anbindung (Google OAuth)
+- Robots/Sitemap-Links und Performance-Status
+
+Backup:
+- Backup-Ansicht zeigt Dateien des aktiven Backup-Ziels
+- Manueller Backup-Run (voll oder only-db), mit --disable-notifications
+- Anzeige von Pfaden, Dropbox-Status, Retention
+- Scheduler-Jobs fuer backup:run und backup:clean aktiviert
+
+AI:
+- API-Verbindungstest
+- Status-Caching (ok/failed)
+
+Jobs:
+- Queue/Cron-Herzschlag (Ampeln: Cron ok / Queue-Worker ok) und Jobstatus
+- Trigger fuer Analyse-/Redaction-Jobs
+
+============================================================
+7) DISTRIBUTIONSWEG (END-TO-END)
+============================================================
+1. Erfassung
+   - Redaktion erstellt News in /admin/news/create
+   - Felder: Titel, Teaser/Subheadline, Body, Region/Ort, Status, publiziert/Embargo
+
+2. Medienaufnahme und Aufbereitung
+   - Upload von Bild/Video/Audio pro News
+   - Speicherpfade NEUER Uploads (seit Umstellung): strukturiert unter
+     news-media/YYYY/MM/DD/{artikel-slug}/ bzw. .../derived/ fuer abgeleitete Dateien
+     (Preview, Thumb, Poster, Redaction-Backups etc.); Altbestaende unveraendert lesbar
+     (Legacy-Pfade). Zentrale Logik: App\Services\MediaStorage (generateMediaPath /
+     generateDerivedMediaPath). Doku: docs/media-storage-structure.md
+   - Medienattribute (sichtbar/versand/teaser/caption)
+   - Bild- und Video-Metadatenjobs
+   - Optional Redaction (Kennzeichen/Gesichter/Regionen)
+
+3. Freigabe und Publikation
+   - Status auf published, zeitliche Sichtbarkeit ueber published_at/embargo_at
+   - Oeffentliche Ausspielung:
+     - Liste: /
+     - Detail: /news/{slug}
+   - SEO-Ausspielung in Sitemap + Sitemap-News
+
+4. Distribution (B2B-Auslieferung)
+   - E-Mail-Distribution:
+     - Empfaenger ueber DeliveryDestination und/oder Kontakt
+     - Signierter 48h-Link auf /d/{token}
+   - FTP/SFTP-Distribution:
+     - UploadRun mit DeliveryRun + DeliveryRunItems
+
+5. Empfaengerfluss
+   - Empfaenger oeffnet Delivery-Link
+   - optional Confirm-Schritt
+   - Download einzelner Medien ueber signierte Download-URL (Originalmedium path;
+     keine Wasserzeichen-Vorschau als Download)
+   - Events werden protokolliert (opened/confirmed/downloaded)
+
+6. Monetarisierung / Nachverfolgung
+   - Nutzungseintraege in Backoffice Usage
+   - Aggregation in Billing (Rechnungsentwuerfe)
+   - Versand finaler Rechnung inkl. Exportformaten
+
+7. Betrieb / Sicherheit
+   - Cron + Queue Heartbeat
+   - Backup (manuell + geplant)
+   - noindex fuer interne Bereiche, indexierbar fuer public content
+
+============================================================
+8) SEO- UND URL-LOGIK (AKTUELL)
+============================================================
+- Canonical: global normalisiert (https, query-frei)
+- Robots:
+  - index,follow fuer relevante Seiten
+  - noindex,follow fuer Such-/Parameterseiten
+  - noindex,nofollow fuer Admin/Auth/Delivery/System
+- Slug-Handling:
+  - /news/{slug} mit Sichtbarkeitspruefung
+  - Redirect-Tabelle news_slug_redirects fuer alte Slugs (301) / gone (410)
+
+============================================================
+9) AKTIVE SCHEDULER-JOBS (AUS CODE)
+============================================================
+- * * * * *  cron_heartbeat
+- * * * * *  queue_worker_heartbeat
+- 0 2 * * *  backup:run --disable-notifications
+- 0 3 * * *  backup:clean
+- 0 * * * *  inspire
+
+============================================================
+10) WICHTIGE TECHNISCHE HINWEISE
+============================================================
+- Queue-Worker muss laufen, sonst bleiben bestimmte Verarbeitungsschritte aus
+- Backup-Ziel ist durch backup-config bestimmt (nicht zwingend storage/app/backups)
+- Delivery-Links sind zeitlich begrenzt und signiert
+- Oeffentliche URL-Erzeugung fuer News erfolgt ueber aktuellen slug
+- Medien: MediaStorage mit aktiver Disk + Fallback-Disk (Lesen/URL/Exists/Delete)
+- DELIVERY-SYSTEM.md: Details zu Delivery inkl. Download-Originalregel
+
+============================================================
+ENDE DOKUMENT
+============================================================

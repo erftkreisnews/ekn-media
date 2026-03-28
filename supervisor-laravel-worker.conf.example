@@ -1,0 +1,17 @@
+# Supervisor-Konfiguration für Laravel Queue Worker
+# Installieren: sudo cp supervisor-laravel-worker.conf.example /etc/supervisor/conf.d/laravel-worker.conf
+# Dann anpassen: user=admin, Pfad prüfen. Danach:
+#   sudo supervisorctl reread
+#   sudo supervisorctl update
+#   sudo supervisorctl start laravel-worker:*
+
+[program:laravel-worker]
+process_name=%(program_name)s_%(process_num)02d
+command=php /usr/home/admin/public_html/media/laravel12/artisan queue:work --sleep=3 --tries=3 --timeout=300
+autostart=true
+autorestart=true
+user=admin
+numprocs=1
+redirect_stderr=true
+stdout_logfile=/usr/home/admin/public_html/media/laravel12/storage/logs/worker.log
+stopwaitsecs=360
