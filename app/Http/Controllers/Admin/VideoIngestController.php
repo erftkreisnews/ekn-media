@@ -167,7 +167,7 @@ class VideoIngestController extends Controller
 
     public function show(IngestFile $ingestFile): View
     {
-        $ingestFile->load(['source', 'newsItem']);
+        $ingestFile->load(['source', 'newsItem', 'batch']);
         $newsChoices = NewsItem::query()
             ->orderByDesc('updated_at')
             ->limit(200)
@@ -191,11 +191,29 @@ class VideoIngestController extends Controller
                 });
         }
 
+        $statusKey = 'ingest.file_status.'.$ingestFile->status;
+        $ingestStatusLabel = __($statusKey);
+        if ($ingestStatusLabel === $statusKey) {
+            $ingestStatusLabel = (string) $ingestFile->status;
+        }
+
+        $ingestPreviewStatusLabel = null;
+        if (filled($ingestFile->preview_status ?? null)) {
+            $pv = (string) $ingestFile->preview_status;
+            $pkey = 'ingest.preview_status.'.$pv;
+            $ingestPreviewStatusLabel = __($pkey);
+            if ($ingestPreviewStatusLabel === $pkey) {
+                $ingestPreviewStatusLabel = $pv;
+            }
+        }
+
         return view('admin.ingest.show', [
             'ingestFile' => $ingestFile,
             'newsChoices' => $newsChoices,
             'activeRenderJobForClip' => $activeRenderJobForClip,
             'ingestPreviewMaxSeconds' => (int) config('ingest.preview.max_seconds', 60),
+            'ingestStatusLabel' => $ingestStatusLabel,
+            'ingestPreviewStatusLabel' => $ingestPreviewStatusLabel,
         ]);
     }
 
