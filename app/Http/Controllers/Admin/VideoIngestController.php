@@ -432,7 +432,7 @@ class VideoIngestController extends Controller
             ->where('news_item_id', $newsItem->id)
             ->whereIn('status', [
                 IngestFile::STATUS_ASSIGNED,
-                IngestFile::STATUS_RENDERING,
+                'rendering',
                 IngestFile::STATUS_USED,
             ])
             ->orderByRaw('selection_order IS NULL')
@@ -459,12 +459,29 @@ class VideoIngestController extends Controller
             'jobId' => $activeJob?->id,
         ];
 
+        $newsStatusKey = 'news.status.'.$newsItem->status;
+        $newsStatusLabel = __($newsStatusKey);
+        if ($newsStatusLabel === $newsStatusKey) {
+            $newsStatusLabel = (string) $newsItem->status;
+        }
+
+        $workspaceSummary = [
+            'total' => $clips->count(),
+            'assigned' => $clips->where('status', IngestFile::STATUS_ASSIGNED)->count(),
+            'rendering' => $clips->where('status', 'rendering')->count(),
+            'used' => $clips->where('status', IngestFile::STATUS_USED)->count(),
+            'marked_for_final' => $clips->filter(fn (IngestFile $c): bool => (bool) ($c->is_selected ?? false))->count(),
+            'with_preview_file' => $clips->filter(fn (IngestFile $c): bool => filled($c->preview_path ?? null))->count(),
+        ];
+
         return view('admin.ingest.news-workspace', compact(
             'newsItem',
             'clips',
             'activeJob',
             'ingestRenderPoll',
             'ingestRenderMonitorOptions',
+            'newsStatusLabel',
+            'workspaceSummary',
         ));
     }
 
