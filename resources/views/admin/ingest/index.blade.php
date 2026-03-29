@@ -282,7 +282,98 @@
             </form>
         </x-admin.card>
 
+        @if (isset($browserPlayableClips) && $browserPlayableClips->isNotEmpty())
+            <x-admin.card>
+                <div class="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold text-gray-900">Schnell-Sichtung (browserfähig)</h2>
+                        <p class="mt-1 text-xs text-gray-600 max-w-3xl">
+                            MP4/WebM auf dieser Seite – eingebetteter Player über die bestehende Route
+                            <code class="rounded bg-gray-100 px-1 text-[11px]">admin.ingest.playback</code>
+                            (lokale Original-/Proxy-Datei). Nicht-browserfähige Formate erscheinen nur in der Tabelle darunter.
+                        </p>
+                    </div>
+                    <p class="text-xs font-medium text-gray-500">{{ $browserPlayableClips->count() }} von {{ $files->count() }} auf dieser Seite</p>
+                </div>
+                <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                    @foreach ($browserPlayableClips as $f)
+                        @php
+                            $isTodayCard = false;
+                            if ($f->created_at) {
+                                try {
+                                    $isTodayCard = $f->created_at->format('Y-m-d') === now()->toDateString();
+                                } catch (\Throwable $e) {
+                                    $isTodayCard = false;
+                                }
+                            }
+                        @endphp
+                        <article @class([
+                            'flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm ring-1 ring-black/5',
+                            'ring-sky-300/60' => $isTodayCard,
+                        ])>
+                            <div class="relative aspect-video bg-gray-950">
+                                <video
+                                    class="h-full w-full object-contain"
+                                    controls
+                                    playsinline
+                                    preload="metadata"
+                                    src="{{ route('admin.ingest.playback', $f) }}"
+                                    title="{{ $f->original_name }}"
+                                >
+                                </video>
+                                @if ($isTodayCard)
+                                    <span class="absolute left-2 top-2 rounded bg-sky-600/90 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">Heute</span>
+                                @endif
+                            </div>
+                            <div class="flex flex-1 flex-col gap-2 p-3">
+                                <p class="text-xs font-semibold text-gray-900 line-clamp-2 break-all" title="{{ $f->original_name }}">{{ $f->original_name }}</p>
+                                <div class="flex flex-wrap gap-1.5 text-[11px]">
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-800">#{{ $f->id }}</span>
+                                    @php
+                                        $cardStatus = __('ingest.file_status.'.$f->status);
+                                        if ($cardStatus === 'ingest.file_status.'.$f->status) {
+                                            $cardStatus = (string) $f->status;
+                                        }
+                                    @endphp
+                                    <span class="rounded-full bg-gray-100 px-2 py-0.5 text-gray-800">{{ $cardStatus }}</span>
+                                </div>
+                                <dl class="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px] text-gray-600">
+                                    <div><dt class="text-gray-400">Dauer</dt><dd class="font-medium text-gray-800">{{ $f->duration_s ? number_format((float) $f->duration_s, 1, ',', '').' s' : '—' }}</dd></div>
+                                    <div>
+                                        <dt class="text-gray-400">Größe</dt>
+                                        <dd class="font-medium text-gray-800">
+                                            @if ($f->file_size !== null)
+                                                @php($szc = (int) $f->file_size)
+                                                @if ($szc >= 1048576)
+                                                    {{ number_format($szc / 1048576, 1, ',', '.') }} MB
+                                                @elseif ($szc >= 1024)
+                                                    {{ number_format($szc / 1024, 0, ',', '.') }} KB
+                                                @else
+                                                    {{ $szc }} B
+                                                @endif
+                                            @else
+                                                —
+                                            @endif
+                                        </dd>
+                                    </div>
+                                    <div><dt class="text-gray-400">News</dt><dd class="font-medium {{ $f->news_item_id ? 'text-emerald-800' : 'text-gray-500' }}">{{ $f->news_item_id ? 'ja (#'.$f->news_item_id.')' : 'nein' }}</dd></div>
+                                    <div><dt class="text-gray-400">Auswahl</dt><dd class="font-medium {{ ($f->is_selected ?? false) ? 'text-indigo-800' : 'text-gray-500' }}">{{ ($f->is_selected ?? false) ? 'ja' : 'nein' }}</dd></div>
+                                </dl>
+                                <div class="mt-auto pt-1">
+                                    <a href="{{ route('admin.ingest.show', $f) }}" class="inline-flex w-full items-center justify-center rounded-lg border border-[#092E48] bg-[#092E48] px-3 py-2 text-xs font-medium text-white hover:bg-[#0b3858]">
+                                        Details
+                                    </a>
+                                </div>
+                            </div>
+                        </article>
+                    @endforeach
+                </div>
+            </x-admin.card>
+        @endif
+
         <x-admin.card>
+            <h2 class="text-base font-semibold text-gray-900 mb-1">Alle Einträge</h2>
+            <p class="mb-3 text-xs text-gray-500">Vollständige tabellarische Übersicht inkl. nicht-browserfähiger Formate (z. B. MXF).</p>
             <p class="mb-3 text-xs text-gray-500">
                 <span class="font-medium text-gray-700">Sortierung:</span> Neueste zuerst (höchste ID).
                 Zeilen mit <span class="rounded bg-sky-100 px-1 py-0.5 text-sky-900">heutigem Eingang</span> sind hervorgehoben (Eingangszeit = heute).
@@ -307,7 +398,16 @@
                     </thead>
                     <tbody class="divide-y divide-gray-200 bg-white">
                         @forelse ($files as $f)
-                            @php($isToday = $f->created_at && $f->created_at->isToday())
+                            @php
+                                $isToday = false;
+                                if ($f->created_at) {
+                                    try {
+                                        $isToday = $f->created_at->format('Y-m-d') === now()->toDateString();
+                                    } catch (\Throwable $e) {
+                                        $isToday = false;
+                                    }
+                                }
+                            @endphp
                             <tr @class([
                                 'bg-sky-50/90' => $isToday,
                             ])>
@@ -343,7 +443,13 @@
                                     @endif
                                 </td>
                                 <td class="px-3 py-2 text-sm align-top">
-                                    <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">{{ $f->status_label }}</span>
+                                    @php
+                                        $__rowStatus = __('ingest.file_status.'.$f->status);
+                                        if ($__rowStatus === 'ingest.file_status.'.$f->status) {
+                                            $__rowStatus = (string) $f->status;
+                                        }
+                                    @endphp
+                                    <span class="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-800">{{ $__rowStatus }}</span>
                                 </td>
                                 <td class="px-3 py-2 text-sm align-top">
                                     @if ($f->preview_status === 'ready' || (filled($f->preview_path) && $f->preview_status === null))
@@ -383,7 +489,7 @@
                                     @endif
                                 </td>
                                 <td class="px-3 py-2 text-sm align-top">
-                                    @if ($f->is_selected)
+                                    @if ($f->is_selected ?? false)
                                         <span class="text-indigo-800 font-medium">ja</span>
                                     @else
                                         <span class="text-gray-400">nein</span>

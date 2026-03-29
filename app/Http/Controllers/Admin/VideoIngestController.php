@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response;
@@ -52,7 +53,26 @@ class VideoIngestController extends Controller
         $stats = $this->ingestIndexStats();
         $filterActive = $this->ingestIndexAnyFilterActive($request);
 
-        return view('admin.ingest.index', compact('files', 'sources', 'stats', 'filterActive'));
+        $browserPlayableClips = collect($files->items())
+            ->filter(fn (IngestFile $f) => $this->ingestIndexIsBrowserPlayableVideo($f))
+            ->values();
+
+        return view('admin.ingest.index', compact('files', 'sources', 'stats', 'filterActive', 'browserPlayableClips'));
+    }
+
+    /**
+     * MP4/WebM anhand MIME und Dateiendung – nur für die Index-Kachelansicht (keine fachliche Workflow-Änderung).
+     */
+    private function ingestIndexIsBrowserPlayableVideo(IngestFile $f): bool
+    {
+        $mime = strtolower((string) ($f->mime ?? ''));
+        if (str_starts_with($mime, 'video/mp4') || str_starts_with($mime, 'video/webm')) {
+            return true;
+        }
+
+        $ext = strtolower((string) pathinfo((string) $f->original_name, PATHINFO_EXTENSION));
+
+        return in_array($ext, ['mp4', 'webm'], true);
     }
 
     /**
@@ -77,7 +97,7 @@ class VideoIngestController extends Controller
             ]);
         }
 
-        if ($request->boolean('no_preview')) {
+        if ($request->boolean('no_preview') && $this->ingestFilesTableHasColumn('preview_path')) {
             $query->whereNull('preview_path')
                 ->whereNotIn('status', [
                     IngestFile::STATUS_IMPORTED,
@@ -102,11 +122,11 @@ class VideoIngestController extends Controller
             $query->whereNull('news_item_id');
         }
 
-        if ($request->boolean('selected')) {
+        if ($request->boolean('selected') && $this->ingestFilesTableHasColumn('is_selected')) {
             $query->where('is_selected', true);
         }
 
-        if ($request->boolean('not_selected')) {
+        if ($request->boolean('not_selected') && $this->ingestFilesTableHasColumn('is_selected')) {
             $query->where('is_selected', false);
         }
     }
@@ -119,12 +139,12 @@ class VideoIngestController extends Controller
             || $request->filled('to')
             || $request->boolean('today')
             || $request->boolean('validated')
-            || $request->boolean('no_preview')
+            || ($request->boolean('no_preview') && $this->ingestFilesTableHasColumn('preview_path'))
             || $request->boolean('errors')
             || $request->boolean('with_news')
             || $request->boolean('without_news')
-            || $request->boolean('selected')
-            || $request->boolean('not_selected');
+            || ($request->boolean('selected') && $this->ingestFilesTableHasColumn('is_selected'))
+            || ($request->boolean('not_selected') && $this->ingestFilesTableHasColumn('is_selected'));
     }
 
     /**
@@ -135,6 +155,24 @@ class VideoIngestController extends Controller
     private function ingestIndexStats(): array
     {
         $base = IngestFile::query();
+
+        $withoutPreview = 0;
+        if ($this->ingestFilesTableHasColumn('preview_path')) {
+            $withoutPreview = (clone $base)
+                ->whereNull('preview_path')
+                ->whereNotIn('status', [
+                    IngestFile::STATUS_IMPORTED,
+                    IngestFile::STATUS_VALIDATING,
+                    IngestFile::STATUS_REJECTED,
+                    IngestFile::STATUS_FAILED,
+                ])
+                ->count();
+        }
+
+        $isSelectedCount = 0;
+        if ($this->ingestFilesTableHasColumn('is_selected')) {
+            $isSelectedCount = (clone $base)->where('is_selected', true)->count();
+        }
 
         return [
             'total' => (clone $base)->count(),
@@ -147,22 +185,27 @@ class VideoIngestController extends Controller
                 'rendering',
                 IngestFile::STATUS_USED,
             ])->count(),
-            'without_preview' => (clone $base)
-                ->whereNull('preview_path')
-                ->whereNotIn('status', [
-                    IngestFile::STATUS_IMPORTED,
-                    IngestFile::STATUS_VALIDATING,
-                    IngestFile::STATUS_REJECTED,
-                    IngestFile::STATUS_FAILED,
-                ])
-                ->count(),
+            'without_preview' => $withoutPreview,
             'rejected_or_failed' => (clone $base)->whereIn('status', [
                 IngestFile::STATUS_REJECTED,
                 IngestFile::STATUS_FAILED,
             ])->count(),
-            'is_selected' => (clone $base)->where('is_selected', true)->count(),
+            'is_selected' => $isSelectedCount,
             'with_news' => (clone $base)->whereNotNull('news_item_id')->count(),
         ];
+    }
+
+    /** @param  non-empty-string  $column */
+    private function ingestFilesTableHasColumn(string $column): bool
+    {
+        static $cache = [];
+
+        if (! array_key_exists($column, $cache)) {
+            $cache[$column] = Schema::hasTable('ingest_files')
+                && Schema::hasColumn('ingest_files', $column);
+        }
+
+        return $cache[$column];
     }
 
     public function show(IngestFile $ingestFile): View
