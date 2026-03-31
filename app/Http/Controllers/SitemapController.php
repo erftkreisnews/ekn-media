@@ -148,6 +148,7 @@ class SitemapController extends Controller
 
         $news = NewsItem::query()
             ->publicVisible()
+            ->whereNotNull('published_at')
             ->where('published_at', '>=', now()->subHours(48))
             ->orderByDesc('published_at')
             ->limit(1000)
@@ -158,6 +159,9 @@ class SitemapController extends Controller
         $xml .= ' xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">'."\n";
 
         foreach ($news as $item) {
+            if (! $item->published_at) {
+                continue;
+            }
             $loc = $baseUrl.'/news/'.$item->slug;
             $pubDate = $item->published_at->toIso8601String();
             $lastmod = ($item->updated_at ?? $item->published_at)?->toIso8601String() ?? $pubDate;
