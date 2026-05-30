@@ -11,12 +11,31 @@ use Tests\TestCase;
 
 class GenerateVideoStillsDurationProbeTest extends TestCase
 {
-    private static function ffmpegAvailable(): bool
+    private static function ffmpegIntegrationEnabled(): bool
     {
+        if (getenv('GITHUB_ACTIONS')) {
+            return false;
+        }
+
+        $ffmpeg = trim((string) config('media.ffmpeg_path', 'ffmpeg'));
+        if ($ffmpeg !== '' && is_executable($ffmpeg)) {
+            return true;
+        }
+
         $p = new Process(['which', 'ffmpeg']);
         $p->run();
 
         return $p->isSuccessful();
+    }
+
+    private static function ffmpegBinary(): string
+    {
+        $configured = trim((string) config('media.ffmpeg_path', 'ffmpeg'));
+        if ($configured !== '' && is_executable($configured)) {
+            return $configured;
+        }
+
+        return 'ffmpeg';
     }
 
     private static function makeTestMp4(string $path, int $seconds): void
@@ -40,8 +59,8 @@ class GenerateVideoStillsDurationProbeTest extends TestCase
     #[Test]
     public function ffprobe_json_and_ffmpeg_stderr_match_clip_duration(): void
     {
-        if (! self::ffmpegAvailable()) {
-            $this->markTestSkipped('ffmpeg not in PATH');
+        if (! self::ffmpegIntegrationEnabled()) {
+            $this->markTestSkipped('ffmpeg integration not available');
         }
 
         $path = sys_get_temp_dir().'/gen_vs_duration_test_'.uniqid('', true).'.mp4';
@@ -64,7 +83,7 @@ class GenerateVideoStillsDurationProbeTest extends TestCase
         $this->assertNotNull($fromProbe);
         $this->assertEqualsWithDelta((float) $expectedSeconds, (float) $fromProbe, 2.5, 'ffprobe JSON duration should match generated clip');
 
-        $ffmpegPath = (string) config('media.ffmpeg_path', 'ffmpeg');
+        $ffmpegPath = self::ffmpegBinary();
         $ffmpegStderr = $ref->getMethod('probeDurationSecondsWithFfmpegStderr');
         $ffmpegStderr->setAccessible(true);
         $fromFfmpeg = $ffmpegStderr->invoke($job, $path, $ffmpegPath);

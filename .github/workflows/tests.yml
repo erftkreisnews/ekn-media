@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [master, main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -26,6 +29,7 @@ jobs:
 
     env:
       APP_ENV: testing
+      GITHUB_ACTIONS: true
       DB_CONNECTION: mysql
       DB_HOST: 127.0.0.1
       DB_PORT: 3306
