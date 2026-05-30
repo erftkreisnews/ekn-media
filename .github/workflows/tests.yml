@@ -5,6 +5,7 @@ on:
     branches: [master, main]
   pull_request:
     branches: [master, main]
+  workflow_dispatch:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -38,6 +39,7 @@ jobs:
       FFMPEG_PATH: /usr/bin/ffmpeg
       FFPROBE_PATH: /usr/bin/ffprobe
       FILESYSTEM_DISK: local
+      LOG_DEPRECATIONS_CHANNEL: null
 
     steps:
       - name: Checkout
@@ -77,4 +79,6 @@ jobs:
         run: php artisan migrate --force
 
       - name: Execute tests
-        run: composer test
+        run: |
+          php artisan config:clear --no-ansi
+          php artisan test --without-tty
