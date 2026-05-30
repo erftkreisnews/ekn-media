@@ -28,7 +28,7 @@ class CustomerContactController extends Controller
     public function store(Request $request, Organization $customer): RedirectResponse
     {
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'email'],
             'phone' => ['nullable', 'string', 'max:100'],
             'role' => ['nullable', 'string', 'max:255'],
@@ -38,6 +38,10 @@ class CustomerContactController extends Controller
             'billing_type' => ['nullable', 'string', 'in:lizenz,honorar'],
         ]);
         $validated['organization_id'] = $customer->id;
+        $validated['name'] = trim((string) ($validated['name'] ?? ''));
+        if ($validated['name'] === '') {
+            $validated['name'] = trim((string) $validated['email']);
+        }
         $validated['use_for_invoice'] = $request->boolean('use_for_invoice');
         $validated['billing_department'] = $request->input('billing_department') ?: null;
         $validated['billing_type'] = $request->input('billing_type') ?: null;
@@ -72,7 +76,7 @@ class CustomerContactController extends Controller
         }
 
         $validated = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'name' => ['nullable', 'string', 'max:255'],
             'email' => ['required', 'email'],
             'phone' => ['nullable', 'string', 'max:100'],
             'role' => ['nullable', 'string', 'max:255'],
@@ -81,6 +85,10 @@ class CustomerContactController extends Controller
             'billing_department' => ['nullable', 'string', 'in:newsroom,studio_koeln,studio_bonn'],
             'billing_type' => ['nullable', 'string', 'in:lizenz,honorar'],
         ]);
+        $validated['name'] = trim((string) ($validated['name'] ?? ''));
+        if ($validated['name'] === '') {
+            $validated['name'] = trim((string) $validated['email']);
+        }
         $validated['use_for_invoice'] = $request->boolean('use_for_invoice');
         $validated['billing_department'] = $request->input('billing_department') ?: null;
         $validated['billing_type'] = $request->input('billing_type') ?: null;

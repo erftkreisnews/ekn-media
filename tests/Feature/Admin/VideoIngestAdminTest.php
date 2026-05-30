@@ -3,6 +3,7 @@
 namespace Tests\Feature\Admin;
 
 use App\Models\User;
+use App\Support\AdminPermissions;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
@@ -14,7 +15,8 @@ class VideoIngestAdminTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Permission::findOrCreate('access_admin');
+        Permission::findOrCreate(AdminPermissions::ACCESS);
+        Permission::findOrCreate(AdminPermissions::INGEST);
     }
 
     public function test_guest_is_redirected_from_ingest_index(): void
@@ -28,16 +30,26 @@ class VideoIngestAdminTest extends TestCase
         $user = User::factory()->create();
         $this->actingAs($user)
             ->get(route('admin.ingest.index'))
-            ->assertForbidden();
+            ->assertRedirect(route('admin.dashboard'));
     }
 
     public function test_user_with_access_admin_can_open_ingest_index(): void
     {
         $user = User::factory()->create();
-        $user->givePermissionTo('access_admin');
+        $user->givePermissionTo([AdminPermissions::ACCESS, AdminPermissions::INGEST]);
 
         $this->actingAs($user)
             ->get(route('admin.ingest.index'))
+            ->assertOk();
+    }
+
+    public function test_user_with_access_admin_can_open_ingest_statistics(): void
+    {
+        $user = User::factory()->create();
+        $user->givePermissionTo([AdminPermissions::ACCESS, AdminPermissions::INGEST]);
+
+        $this->actingAs($user)
+            ->get(route('admin.ingest.statistics'))
             ->assertOk();
     }
 }

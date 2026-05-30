@@ -32,6 +32,9 @@ class ZugferdInvoiceService
             'usageRecords.newsItem',
         ]);
 
+        $invoice->syncTotalsFromUsageRecordsIfEditable();
+        $invoice->refresh();
+
         $usageRecords = $invoice->usageRecords
             ->sortBy([
                 ['used_at', 'asc'],
@@ -108,13 +111,14 @@ class ZugferdInvoiceService
         foreach ($usageRecords as $record) {
             $hasImages = (int) $record->images_count > 0;
             $hasVideo = (float) $record->video_minutes > 0;
+            $hasRadio = (float) $record->radio_minutes > 0;
 
-            if (! $hasImages && ! $hasVideo) {
-                throw new RuntimeException('Eine Rechnungsposition hat weder Bildmenge noch Videominuten und ist für den ZUGFeRD-MVP nicht zulässig.');
+            if (! $hasImages && ! $hasVideo && ! $hasRadio) {
+                throw new RuntimeException('Eine Rechnungsposition hat weder Bildmenge noch Sendeminuten und ist für den ZUGFeRD-MVP nicht zulässig.');
             }
 
-            if ($hasImages && $hasVideo) {
-                throw new RuntimeException('Eine Rechnungsposition kombiniert Bilder und Video. Der ZUGFeRD-MVP unterstützt nur eindeutige Standardpositionen.');
+            if ($hasImages && ($hasVideo || $hasRadio)) {
+                throw new RuntimeException('Eine Rechnungsposition kombiniert Bilder und Sendeminuten. Der ZUGFeRD-MVP unterstützt nur eindeutige Standardpositionen.');
             }
         }
     }
@@ -132,7 +136,8 @@ class ZugferdInvoiceService
         $buyerName = trim((string) ($invoice->product->billing_company ?: $invoice->organization->name ?: ''));
         $billingName = trim((string) ($invoice->product->billing_name ?: ''));
         $contactName = trim((string) ($invoice->contact?->name ?: ''));
-        $buyerId = trim((string) ($invoice->product->buyer_reference ?: ''));
+        $invoice->product->loadMissing('organization');
+        $buyerId = $invoice->product->resolvedBuyerReference();
         $serviceDateLabel = $this->buildServiceDateLabel($usageRecords);
 
         $builder = ZugferdDocumentBuilder::createNew(ZugferdProfiles::PROFILE_EN16931);
@@ -215,23 +220,24 @@ class ZugferdInvoiceService
             $dueDate
         );
 
-        foreach ($usageRecords as $index => $record) {
-            [$quantity, $unitCode, $unitNetAmount] = $this->extractQuantityPriceAndUnit($record);
-            $lineNetAmount = round((float) $record->total_amount, 2);
-
-            $builder->addNewPosition((string) ($index + 1));
-            $builder->setDocumentPositionProductDetails(
-                $this->buildLineItemTitle($record, $invoice),
-                $this->buildLineItemDescription($record)
-            );
-            $builder->setDocumentPositionNetPrice($unitNetAmount);
-            $builder->setDocumentPositionQuantity($quantity, $unitCode);
-            $builder->addDocumentPositionTax(
-                ZugferdVatCategoryCodes::STAN_RATE,
-                ZugferdVatTypeCodes::VALUE_ADDED_TAX,
-                $vatRate
-            );
-            $builder->setDocumentPositionLineSummation($lineNetAmount);
+        $position = 1;
+        foreach ($usageRecords as $record) {
+            foreach ($this->buildZugferdLineItemsForRecord($record, $invoice) as $lineItem) {
+                $builder->addNewPosition((string) $position);
+                $builder->setDocumentPositionProductDetails(
+                    $lineItem['title'],
+                    $lineItem['description']
+                );
+                $builder->setDocumentPositionNetPrice($lineItem['unit_price']);
+                $builder->setDocumentPositionQuantity($lineItem['quantity'], $lineItem['unit_code']);
+                $builder->addDocumentPositionTax(
+                    ZugferdVatCategoryCodes::STAN_RATE,
+                    ZugferdVatTypeCodes::VALUE_ADDED_TAX,
+                    $vatRate
+                );
+                $builder->setDocumentPositionLineSummation($lineItem['line_total']);
+                $position++;
+            }
         }
 
         $builder->addDocumentTax(
@@ -296,20 +302,22 @@ class ZugferdInvoiceService
             $headerReferenceCode = trim((string) ($organization?->external_author_id ?? ''));
         }
 
-        $lineItems = $usageRecords->values()->map(function (UsageRecord $record, int $index) use ($invoice) {
-            [$quantity, $unitCode, $unitNetAmount] = $this->extractQuantityPriceAndUnit($record);
-            $unitLabel = $unitCode === ZugferdUnitCodes::REC20_PIECE ? 'Stück' : 'Minuten';
-
-            return [
-                'position' => $index + 1,
-                'title' => $this->buildLineItemTitle($record, $invoice),
-                'description' => $this->buildLineItemDescription($record),
-                'quantity' => $quantity,
-                'unit_label' => $unitLabel,
-                'unit_price' => $unitNetAmount,
-                'line_total' => round((float) $record->total_amount, 2),
-            ];
-        })->all();
+        $lineItems = [];
+        $position = 1;
+        foreach ($usageRecords as $record) {
+            foreach ($this->buildZugferdLineItemsForRecord($record, $invoice) as $lineItem) {
+                $lineItems[] = [
+                    'position' => $position,
+                    'title' => $lineItem['title'],
+                    'description' => $lineItem['description'],
+                    'quantity' => $lineItem['quantity'],
+                    'unit_label' => $lineItem['unit_code'] === ZugferdUnitCodes::REC20_PIECE ? 'Stück' : 'Minuten',
+                    'unit_price' => $lineItem['unit_price'],
+                    'line_total' => $lineItem['line_total'],
+                ];
+                $position++;
+            }
+        }
 
         return [
             'invoice' => $invoice,
@@ -406,11 +414,53 @@ class ZugferdInvoiceService
             ];
         }
 
+        if ((float) $record->video_minutes > 0) {
+            return [
+                round((float) $record->video_minutes, 2),
+                ZugferdUnitCodes::REC20_MINUTE_UNIT_OF_TIME,
+                round((float) $record->price_per_minute, 4),
+            ];
+        }
+
         return [
-            round((float) $record->video_minutes, 2),
+            round((float) $record->radio_minutes, 2),
             ZugferdUnitCodes::REC20_MINUTE_UNIT_OF_TIME,
             round((float) $record->price_per_minute, 4),
         ];
+    }
+
+    protected function buildZugferdLineItemsForRecord(UsageRecord $record, Invoice $invoice): array
+    {
+        if (WdrNewsroomImageTierLines::appliesTo($record, $invoice)) {
+            $tier = WdrNewsroomImageTierLines::make();
+            $baseDescription = $this->buildLineItemDescription($record);
+            $items = [];
+            foreach ($tier->linesForImageCount((int) $record->images_count) as $line) {
+                $items[] = [
+                    'title' => $line['title'],
+                    'description' => trim($baseDescription."\n".$line['tier_label']),
+                    'quantity' => (float) $line['quantity'],
+                    'unit_code' => ZugferdUnitCodes::REC20_PIECE,
+                    'unit_price' => round((float) $line['unit_price'], 2),
+                    'line_total' => (float) $line['line_total'],
+                ];
+            }
+
+            if ($items !== []) {
+                return $items;
+            }
+        }
+
+        [$quantity, $unitCode, $unitNetAmount] = $this->extractQuantityPriceAndUnit($record);
+
+        return [[
+            'title' => $this->buildLineItemTitle($record, $invoice),
+            'description' => $this->buildLineItemDescription($record),
+            'quantity' => (float) $quantity,
+            'unit_code' => $unitCode,
+            'unit_price' => (float) $unitNetAmount,
+            'line_total' => round((float) $record->total_amount, 2),
+        ]];
     }
 
     protected function buildLineItemTitle(UsageRecord $record, Invoice $invoice): string
@@ -425,6 +475,15 @@ class ZugferdInvoiceService
             $customerName = $invoice->organization?->name ?: 'Kunde';
 
             return 'Videomaterial Verkauf '.$customerName;
+        }
+
+        if ((float) $record->radio_minutes > 0) {
+            $customerName = $invoice->organization?->name ?: 'Kunde';
+            if (($record->billing_type ?? null) === 'honorar') {
+                return 'Honorar (Audio/Radio) '.$customerName;
+            }
+
+            return 'Radiomaterial Verkauf '.$customerName;
         }
 
         return 'Abrechnungsposition';

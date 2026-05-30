@@ -1,0 +1,52 @@
+IST-STAND (AKTUELL)
+Projekt: Erftkreis News Media (Laravel 12)
+Pfad: /usr/home/admin/public_html/media/laravel12
+Zeitstempel: 2026-04-17 09:32:28 CEST
+
+============================================================
+1) KURZSTATUS
+============================================================
+- System ist im aktiven Ausbau und produktionsnah lauffaehig.
+- Es gibt einen sehr grossen laufenden Arbeitsstand im Repository.
+- Aktueller Branch: master
+
+============================================================
+2) GIT-ARBEITSSTAND (JETZT)
+============================================================
+- Gesamtzahl geaenderter Dateien (unstaged + untracked): 310
+- Geaenderte bestehende Dateien (M): 141
+- Neue, noch nicht versionierte Dateien (??): 169
+- Es liegt derzeit kein sauberer "clean working tree" vor.
+
+============================================================
+3) INHALTLICHER STAND (KOMPakt)
+============================================================
+- Admin-/Backoffice-Bereich wurde breit erweitert (Controller, Views, Requests, Services).
+- News-/Medien-Workflows wurden ausgebaut (inkl. Versand, Ingest, Bild-/Video-nahe Funktionen).
+- Billing-, Delivery- und Usage-Bereiche enthalten zahlreiche Anpassungen.
+- Neue Module/Klassen wurden angelegt (u. a. Witness, Planned Events, Presseportal, Lexware-Anbindung, weitere Middleware/Jobs/Models).
+- Konfigurationen, Tests und Dokumentationsdateien wurden umfangreich aktualisiert.
+
+============================================================
+4) RISIKO-/BETRIEBSHINWEIS
+============================================================
+- Aufgrund der Menge paralleler Aenderungen sind Seiteneffekte/Regressionen moeglich.
+- Vor Deployment sollten gezielte Smoke-Tests und mindestens Kern-Feature-Checks laufen.
+- Bei Queue-/Ingest-/Render-Themen ist auf laufende Worker und korrekte Umgebungswerte zu achten.
+
+============================================================
+5) EMPFOHLENE NAECHSTE SCHRITTE
+============================================================
+1. Git-Stand logisch in Themenpakete aufteilen (z. B. Auth, Billing, News, Ingest, Witness).
+2. Pro Themenpaket kurze Funktionspruefung durchfuehren (Happy Path + zentrale Fehlerfaelle).
+3. Danach schrittweise committen (kleine, nachvollziehbare Commits statt Sammel-Commit).
+4. Abschliessend Gesamt-Smoke-Test auf Admin, oeffentliche News und Delivery-Flow.
+
+============================================================
+6) HINWEIS ZUR WEITERVERWENDUNG
+============================================================
+Diese Datei ist bewusst kompakt gehalten und kann direkt fuer:
+- Projekt-Update an Dritte
+- Ticket-/Release-Notizen
+- Uebergabe an weitere Bearbeiter
+verwendet werden.

@@ -215,6 +215,50 @@ class DeliveryDestination extends Model
         return ($this->type ?? '') === 'email';
     }
 
+    /**
+     * EKN Live: Ordner/Dateiname DD_MM_JJJJ-Titel bis zum: … (siehe NewsItem::ftpEknLiveFolderName).
+     */
+    public function usesEknLiveFolderFormat(): bool
+    {
+        return ! empty($this->config_json['ekn_live_folder_format'] ?? false);
+    }
+
+    /**
+     * Organisation entspricht WDR (Name enthält konfigurierte Kennung).
+     */
+    public function isWdrOrganizationDestination(): bool
+    {
+        $org = $this->relationLoaded('organization')
+            ? $this->organization
+            : $this->organization;
+
+        if (! $org || ! isset($org->name)) {
+            return false;
+        }
+
+        $names = config('newsdesk.wdr_organization_names', ['WDR', 'Westdeutscher Rundfunk']);
+        foreach ($names as $name) {
+            if ($name !== '' && stripos($org->name, $name) !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Pro Meldung ein Unterordner (EKN-, WDR- oder Checkbox „WDR-Format“).
+     */
+    public function usesFtpSubfolderPerNewsItem(): bool
+    {
+        if ($this->usesEknLiveFolderFormat()) {
+            return true;
+        }
+
+        return $this->isWdrOrganizationDestination()
+            || ! empty($this->config_json['wdr_subfolder_per_item'] ?? false);
+    }
+
     /** E-Mail-Adressen (To) aus config_json für Versand. */
     public function getEmailToAddresses(): array
     {

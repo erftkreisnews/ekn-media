@@ -16,6 +16,7 @@
         </div>
 
         <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            @can('admin.settings')
             <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
                 <div class="p-4">
                     <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">SEO</h2>
@@ -31,6 +32,23 @@
                             class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]"
                         >
                             Zur SEO-Verwaltung
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                <div class="p-4">
+                    <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Eventplanung</h2>
+                    <p class="mt-2 text-gray-900 font-semibold">Eigener Admin-Bereich</p>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Veranstaltungen, Vorschläge und KI-Vorgaben liegen nicht mehr hier in den System-Einstellungen, sondern unter <span class="font-medium text-gray-800">Eventplanung</span> im Hauptmenü (oder Dashboard-Kachel).
+                    </p>
+                    <div class="mt-4">
+                        <a
+                            href="{{ route('admin.event-planning.index') }}"
+                            class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]"
+                        >
+                            Zur Eventplanung
                         </a>
                     </div>
                 </div>
@@ -75,6 +93,25 @@
             </div>
             <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
                 <div class="p-4">
+                    <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Presseportal</h2>
+                    <p class="mt-2 text-gray-900 font-semibold">
+                        API &amp; Dienststellen (Köln/Bonn)
+                    </p>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Key in .env, Whitelist für Dienststellen-IDs, Meldungen per URL in News-Updates laden.
+                    </p>
+                    <div class="mt-4">
+                        <a
+                            href="{{ route('admin.settings.presseportal') }}"
+                            class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]"
+                        >
+                            Zu Presseportal
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                <div class="p-4">
                     <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Bilder / Upload</h2>
                     <p class="mt-2 text-gray-900 font-semibold">
                         Master-Größe und Upload-Limits
@@ -111,6 +148,29 @@
                     </div>
                 </div>
             </div>
+            @endcan
+            @if(auth()->user()?->hasRole('admin'))
+                <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                    <div class="p-4">
+                        <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Abrechnung</h2>
+                        <p class="mt-2 text-gray-900 font-semibold">
+                            WDR-Tarife für Nutzung
+                        </p>
+                        <p class="mt-1 text-sm text-gray-600">
+                            Preiswerte für WDR Newsroom (Video/Min. und Bildstaffel) im Backoffice selbst pflegen.
+                        </p>
+                        <div class="mt-4">
+                            <a
+                                href="{{ route('admin.settings.usage-tariffs') }}"
+                                class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]"
+                            >
+                                Zu WDR-Tarifen
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            @endif
+            @if(auth()->user()->can('admin.backoffice') || auth()->user()->can('admin.users'))
             <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
                 <div class="p-4">
                     <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Backoffice</h2>
@@ -130,6 +190,28 @@
                     </div>
                 </div>
             </div>
+            @endif
+            @can('admin.settings')
+            <div class="bg-white overflow-hidden shadow-sm rounded-lg border border-gray-200">
+                <div class="p-4">
+                    <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">News-Löschprotokoll</h2>
+                    <p class="mt-2 text-gray-900 font-semibold">
+                        Audit-Trail gelöschter News
+                    </p>
+                    <p class="mt-1 text-sm text-gray-600">
+                        Zeigt, wer welche Nachricht wann gelöscht hat (inkl. News-ID, Titel, Zeit und IP).
+                    </p>
+                    <div class="mt-4">
+                        <a
+                            href="{{ route('admin.settings.news-delete-audit') }}"
+                            class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]"
+                        >
+                            Zum Löschprotokoll
+                        </a>
+                    </div>
+                </div>
+            </div>
+            @endcan
         </div>
     </div>
 @endsection

@@ -4,6 +4,7 @@ namespace App\Services\Lexware;
 
 use App\Models\Invoice;
 use App\Models\UsageRecord;
+use App\Services\Billing\WdrNewsroomImageTierLines;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Http\Client\Response;
@@ -24,6 +25,9 @@ class LexwareInvoiceService
             'contact',
             'usageRecords.newsItem',
         ]);
+
+        $invoice->syncTotalsFromUsageRecordsIfEditable();
+        $invoice->refresh();
 
         if ($invoice->lexware_invoice_id || $invoice->voucher_number) {
             throw new RuntimeException('Diese Rechnung wurde bereits an Lexware übergeben.');
@@ -69,7 +73,7 @@ class LexwareInvoiceService
         $invoice->update([
             'lexware_invoice_id' => $lexwareId,
             'voucher_number' => $voucherNumber,
-            'status' => 'lexware_open',
+            'status' => $this->resolveInvoiceStatusFromVoucherStatus((string) ($lexwareInvoice['voucherStatus'] ?? '')),
             'meta' => $meta,
         ]);
 
@@ -89,6 +93,63 @@ class LexwareInvoiceService
         }
 
         return $response;
+    }
+
+    /**
+     * Zahlungsinformationen zur Ausgangsrechnung (nur Lesen; Schreiben unterstützt die Public API nicht).
+     *
+     * @see https://developers.lexware.io/docs/#payments-endpoint-retrieve-payment-information
+     */
+    public function fetchPaymentInformation(string $lexwareVoucherId): array
+    {
+        $id = trim($lexwareVoucherId);
+        if ($id === '') {
+            throw new RuntimeException('Keine Lexware-Voucher-ID.');
+        }
+
+        $response = $this->client->get('/v1/payments/'.rawurlencode($id));
+        if ($response->failed()) {
+            throw new RuntimeException($this->extractErrorMessage($response));
+        }
+
+        $data = $response->json();
+
+        return is_array($data) ? $data : [];
+    }
+
+    /**
+     * Kompakte Darstellung für invoice.meta (EKN).
+     *
+     * @param  array<string, mixed>  $apiResponse
+     * @return array<string, mixed>
+     */
+    public function summarizePaymentInformation(array $apiResponse): array
+    {
+        $voidReason = null;
+        foreach ([
+            'voucherStatusReason',
+            'voidReason',
+            'cancellationReason',
+            'reason',
+            'note',
+            'remark',
+        ] as $key) {
+            $candidate = trim((string) ($apiResponse[$key] ?? ''));
+            if ($candidate !== '') {
+                $voidReason = $candidate;
+                break;
+            }
+        }
+
+        return [
+            'fetched_at' => now()->toIso8601String(),
+            'open_amount' => $apiResponse['openAmount'] ?? null,
+            'currency' => $apiResponse['currency'] ?? null,
+            'voucher_status' => $apiResponse['voucherStatus'] ?? null,
+            'payment_status' => $apiResponse['paymentStatus'] ?? null,
+            'void_reason' => $voidReason,
+            'payment_items' => $apiResponse['paymentItems'] ?? [],
+        ];
     }
 
     protected function fetchInvoice(string $id): array
@@ -121,23 +182,9 @@ class LexwareInvoiceService
             'archived' => false,
             'voucherDate' => $this->formatTimestamp($invoice->voucher_date),
             'address' => $this->buildAddressPayload($invoice),
-            'lineItems' => $usageRecords->map(function (UsageRecord $record) use ($invoice, $vatRate) {
-                [$quantity, $unitName, $unitNetAmount] = $this->extractQuantityAndPrice($record);
-
-                return [
-                    'type' => 'custom',
-                    'name' => $this->buildLineItemTitle($record, $invoice),
-                    'description' => $this->buildLineItemDescription($record),
-                    'quantity' => $quantity,
-                    'unitName' => $unitName,
-                    'unitPrice' => [
-                        'currency' => 'EUR',
-                        'netAmount' => $unitNetAmount,
-                        'taxRatePercentage' => $vatRate,
-                    ],
-                    'discountPercentage' => 0,
-                ];
-            })->all(),
+            'lineItems' => $usageRecords->flatMap(function (UsageRecord $record) use ($invoice, $vatRate) {
+                return collect($this->buildLexwareLineItemsForRecord($record, $invoice, $vatRate));
+            })->values()->all(),
             'totalPrice' => [
                 'currency' => 'EUR',
             ],
@@ -162,16 +209,13 @@ class LexwareInvoiceService
 
         $companyName = trim((string) ($product->billing_company ?: $invoice->organization?->name ?: ''));
         $billingName = trim((string) ($product->billing_name ?: ''));
-        $contactName = trim((string) ($contact?->name ?: ''));
-
         $supplementParts = array_values(array_filter([
             $billingName !== '' && $billingName !== $companyName ? $billingName : null,
-            $contactName !== '' && $contactName !== $billingName ? $contactName : null,
         ]));
 
         $payload = [
             'contactId' => $product->lexware_contact_id ?: null,
-            'name' => $companyName !== '' ? $companyName : ($contactName !== '' ? $contactName : 'Rechnungsempfänger'),
+            'name' => $companyName !== '' ? $companyName : ($billingName !== '' ? $billingName : 'Rechnungsempfänger'),
         ];
 
         if ($supplementParts !== []) {
@@ -240,11 +284,63 @@ class LexwareInvoiceService
             ];
         }
 
+        if ((float) $record->video_minutes > 0) {
+            return [
+                round((float) $record->video_minutes, 2),
+                'Minuten',
+                round((float) $record->price_per_minute, 4),
+            ];
+        }
+
         return [
-            round((float) $record->video_minutes, 2),
+            round((float) $record->radio_minutes, 2),
             'Minuten',
             round((float) $record->price_per_minute, 4),
         ];
+    }
+
+    protected function buildLexwareLineItemsForRecord(UsageRecord $record, Invoice $invoice, float $vatRate): array
+    {
+        if (WdrNewsroomImageTierLines::appliesTo($record, $invoice)) {
+            $tier = WdrNewsroomImageTierLines::make();
+            $baseDescription = $this->buildLineItemDescription($record);
+            $items = [];
+            foreach ($tier->linesForImageCount((int) $record->images_count) as $line) {
+                $items[] = [
+                    'type' => 'custom',
+                    'name' => $line['title'],
+                    'description' => trim($baseDescription."\n".$line['tier_label']),
+                    'quantity' => (int) round($line['quantity']),
+                    'unitName' => 'Stück',
+                    'unitPrice' => [
+                        'currency' => 'EUR',
+                        'netAmount' => round((float) $line['unit_price'], 2),
+                        'taxRatePercentage' => $vatRate,
+                    ],
+                    'discountPercentage' => 0,
+                ];
+            }
+
+            if ($items !== []) {
+                return $items;
+            }
+        }
+
+        [$quantity, $unitName, $unitNetAmount] = $this->extractQuantityAndPrice($record);
+
+        return [[
+            'type' => 'custom',
+            'name' => $this->buildLineItemTitle($record, $invoice),
+            'description' => $this->buildLineItemDescription($record),
+            'quantity' => $quantity,
+            'unitName' => $unitName,
+            'unitPrice' => [
+                'currency' => 'EUR',
+                'netAmount' => $unitNetAmount,
+                'taxRatePercentage' => $vatRate,
+            ],
+            'discountPercentage' => 0,
+        ]];
     }
 
     protected function buildLineItemTitle(UsageRecord $record, Invoice $invoice): string
@@ -259,6 +355,15 @@ class LexwareInvoiceService
             $customerName = $invoice->organization?->name ?: 'Kunde';
 
             return 'Videomaterial Verkauf '.$customerName;
+        }
+
+        if ((float) $record->radio_minutes > 0) {
+            $customerName = $invoice->organization?->name ?: 'Kunde';
+            if (($record->billing_type ?? null) === 'honorar') {
+                return 'Honorar (Audio/Radio) '.$customerName;
+            }
+
+            return 'Radiomaterial Verkauf '.$customerName;
         }
 
         return 'Abrechnungsposition';
@@ -332,5 +437,12 @@ class LexwareInvoiceService
         }
 
         return 'Lexware-Antwort mit HTTP '.$response->status().'.';
+    }
+
+    protected function resolveInvoiceStatusFromVoucherStatus(string $voucherStatus): string
+    {
+        return mb_strtolower(trim($voucherStatus)) === 'voided'
+            ? 'lexware_voided'
+            : 'lexware_open';
     }
 }

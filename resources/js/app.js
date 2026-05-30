@@ -1,12 +1,18 @@
 import './bootstrap';
 
 import Alpine from 'alpinejs';
+import './koelnimage-gallery-hub';
+import './koelnimage-foto-upload';
+import './admin-image-library';
+import './admin-video-library';
+import './admin-image-editor';
 
 window.Alpine = Alpine;
 
 /**
- * Drop-Zone für Bild-Upload: Drag & Drop + Klick, Duplikate (gleicher Dateiname) werden ausgefiltert.
- * @param {string[]} existingNames - Bereits vorhandene Dateinamen (z. B. bereits hochgeladene Bilder dieser Meldung)
+ * Drop-Zone für Bild-Upload: Drag & Drop + Klick, doppelte Dateinamen nur innerhalb der aktuellen Auswahl.
+ * Bereits vorhandene Dateinamen dürfen erneut hochgeladen werden (z. B. Serien aus verschiedenen Ordnern).
+ * @param {string[]} existingNames - Bereits vorhandene Dateinamen (nur für Kontext/Anzeige)
  */
 Alpine.data('imageUploadDropzone', (existingNames = [], existingCount = null) => ({
     existingNames: Array.isArray(existingNames) ? existingNames : [],
@@ -26,16 +32,42 @@ Alpine.data('imageUploadDropzone', (existingNames = [], existingCount = null) =>
         return this._skipped || 0;
     },
 
+    canUseProgrammaticFileList() {
+        const input = this.$refs.fileInput;
+        if (!input || typeof DataTransfer === 'undefined') return false;
+        try {
+            const dt = new DataTransfer();
+            input.files = dt.files;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    },
+
+    onNativeInputChange(event) {
+        const files = event?.target?.files;
+        if (!files || files.length === 0) return;
+        if (this.canUseProgrammaticFileList()) {
+            this.addFiles(files);
+            // Nur leeren, wenn wir die Auswahl programmgesteuert wieder in input.files schreiben können.
+            event.target.value = '';
+            return;
+        }
+
+        // Mobile Fallback (z. B. iOS Safari): native FileList unverändert lassen.
+        this.pendingFiles = Array.from(files);
+        this._skipped = 0;
+    },
+
     addFiles(fileList) {
         if (!fileList || fileList.length === 0) return;
-        const existingSet = new Set(this.existingNames.map((n) => n.toLowerCase()));
         const pendingNames = new Set(this.pendingFiles.map((f) => f.name.toLowerCase()));
         let skipped = 0;
         const toAdd = [];
         for (let i = 0; i < fileList.length; i++) {
             const file = fileList[i];
             const nameLower = file.name.toLowerCase();
-            if (existingSet.has(nameLower) || pendingNames.has(nameLower)) {
+            if (pendingNames.has(nameLower)) {
                 skipped++;
                 continue;
             }
@@ -75,6 +107,33 @@ Alpine.data('videoUploadDropzone', (existingNames = []) => ({
     },
     get skippedCount() {
         return this._skipped || 0;
+    },
+
+    canUseProgrammaticFileList() {
+        const input = this.$refs.fileInput;
+        if (!input || typeof DataTransfer === 'undefined') return false;
+        try {
+            const dt = new DataTransfer();
+            input.files = dt.files;
+            return true;
+        } catch (e) {
+            return false;
+        }
+    },
+
+    onNativeInputChange(event) {
+        const files = event?.target?.files;
+        if (!files || files.length === 0) return;
+        if (this.canUseProgrammaticFileList()) {
+            this.addFiles(files);
+            // Nur leeren, wenn wir die Auswahl programmgesteuert wieder in input.files schreiben können.
+            event.target.value = '';
+            return;
+        }
+
+        // Mobile Fallback (z. B. iOS Safari): native FileList unverändert lassen.
+        this.pendingFiles = Array.from(files);
+        this._skipped = 0;
     },
 
     addFiles(fileList) {
@@ -176,3 +235,32 @@ document.addEventListener('change', (e) => {
     if (!t || !(t instanceof HTMLInputElement)) return;
     syncStatusIcons(t);
 });
+
+/**
+ * Admin: Löschen nach Bestätigung (OK/Abbrechen). Setzt verstecktes Feld confirmation=ja für das Middleware.
+ */
+window.adminConfirmDelete = function (form) {
+    if (!form || !(form instanceof HTMLFormElement)) {
+        return false;
+    }
+    const raw =
+        form.getAttribute('data-delete-prompt') ||
+        'Wirklich endgültig löschen?';
+    const msg = String(raw)
+        .replace(/\s*Geben Sie zur Bestätigung[^.]*\.?/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    if (!window.confirm(msg || 'Wirklich endgültig löschen?')) {
+        return false;
+    }
+    let hidden = form.querySelector('input[name="confirmation"][data-delete-confirmation="1"]');
+    if (!hidden) {
+        hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'confirmation';
+        hidden.setAttribute('data-delete-confirmation', '1');
+        form.appendChild(hidden);
+    }
+    hidden.value = 'ja';
+    return true;
+};

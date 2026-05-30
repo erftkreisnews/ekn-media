@@ -1,0 +1,140 @@
+================================================================================
+Analyse: Metadatenbearbeitung auf der Admin-Seite
+         …/admin/news/{id}/media/{mediaId}/edit
+         bei zugewiesener „geplanter Veranstaltung“ (Event)
+================================================================================
+Stand (Codebasis): Laravel-App im Projektverzeichnis
+Bezug-URL Beispiel: https://erftkreis-news.media/admin/news/57/media/632/edit
+
+Hinweis zur Begrifflichkeit „Event“
+----------------------------------
+In dieser Anwendung ist das relevante „Event“ die Zuordnung einer
+**geplanten Veranstaltung** an die **Meldung** (Feld planned_event_id am
+NewsItem). Die Auswahl erfolgt in der Meldungsbearbeitung (Partial
+„Geplante Veranstaltung“), nicht als separates Feld auf der
+Medien-Bearbeitungsseite. Alle folgenden Effekte gelten, sobald dieser
+Wert an der Meldung gesetzt ist – unabhängig davon, ob man die
+Medien-URL direkt aufruft.
+
+1. Route und Controller (Seitenaufbau)
+--------------------------------------
+GET /admin/news/{newsItem}/media/{mediaId}/edit
+  → NewsItemController::editMedia
+
+- Lädt das Medium zur Meldung, prüft Berechtigung.
+- Bei Bildern: liest einmalig Metadaten aus der Datei (EXIF/IPTC) via
+  ImageMetadataReader für die Anzeige/Vorbelegung im Formular.
+- Übergibt u. a. newsItem, medium, metadataFromFile, Galerie-Navigation,
+  Credit-Benutzer an die View admin/news/media/edit.blade.php.
+
+Die geplante Veranstaltung wird hier **nicht** separat geladen; sie steckt
+bereits in $newsItem->planned_event_id (Relation plannedEvent).
+
+2. Manuelle Metadaten (Formular „Metadaten speichern“)
+------------------------------------------------------
+PATCH → NewsItemController::updateMedia
+
+Wichtig: **Keine Sperre** durch planned_event_id. Solange die Meldung
+einem Event zugeordnet ist, können Redakteurinnen und Redakteure
+weiterhin alle regulären Metadaten-Felder speichern wie ohne Event.
+
+Validierung und Persistenz (Auszug Logik):
+- Gemeinsam: image_title, photographer, caption, media_keywords,
+  description, is_visible, versand.
+- Video: metadata_location, metadata_recorded_at.
+- Bild: city, state, country, country_code, capture_time, credit,
+  copyright, source; bei gesetztem photographer werden credit/source
+  teilweise aus der Fotografenzeile und newsdesk.iptc_credit abgeleitet.
+
+Nach dem DB-Update:
+- Optional MediaQualityCheck für Bilder.
+- Schreiben der IPTC-Daten in die Master-Datei (ImageMetadataWriter),
+  sofern ein auflösbarer IPTC-Master-Pfad existiert.
+
+Fazit: Die **klassische Metadatenbearbeitung** (Titel, Unterschrift,
+Ort, Schlagwörter, Sichtbarkeit, …) ist mit zugewiesenem Event **unverändert
+möglich**; es gibt keinen abweichenden Codepfad in updateMedia.
+
+3. Auswirkung des Events auf dieselbe Seite: Anonymisierung (Redaction)
+-----------------------------------------------------------------------
+Wenn news_items.planned_event_id gesetzt ist:
+
+Frontend (edit.blade.php):
+- Variable $redactionBlockedByPlannedEvent = true.
+- Der Block „Bereiche unkenntlich machen“ zeigt einen Hinweis statt der
+  interaktiven Redaction-Oberfläche; Badge „Deaktiviert
+  (Veranstaltung zugewiesen)“.
+- Hinweis: Zuweisung in der Meldungsbearbeitung entfernen, falls
+  Anonymisierung nötig ist.
+
+Backend (NewsItemController):
+- redactionLockedForNewsItem() ist true, sobald planned_event_id eine
+  positive ID ist.
+- Alle Redaction-bezogenen Aktionen (Update der Boxen, Ausführung Auto/
+  Jetzt-Redaction, ggf. weitere Pfade im Controller) führen zu Redirect
+  zurück zur Media-Edit-Seite mit Fehlermeldung und Fragment #redaction.
+
+**Metadaten ≠ Redaction:** Titel/Unterschrift/IPTC bleiben bearbeitbar;
+nur die **Bildanonymisierung** ist an der Event-Zuordnung gekoppelt
+gesperrt.
+
+4. Auswirkung des Events auf KI-gestützte Metadaten
+---------------------------------------------------
+Ablauf: Button/Kette löst GenerateImageMetadata (Queue) aus.
+
+a) Prompt-Kontext (ImageMetadataGenerator::buildContext)
+   - Wenn die Meldung planned_event_id hat und ein PlannedEvent existiert:
+     Es wird event_planning_context aus planned->formatForAiPrompt()
+     gebaut (begrenzte Länge) und als Quelle „planned_event“ markiert.
+   - Im User-Prompt erscheint dann ein Abschnitt
+     „Geplante Veranstaltung (Eventplanung; …)“ plus dieser Text.
+   - Zusätzliche Motorsport-Hinweise im Prompt, wenn die Quelle
+     „planned_event“ ist (Startnummer am Fahrzeug, Box nur bei Pit-
+     Kontext, …).
+
+b) Nach der KI-Antwort (PlannedEventMetadataEnricher)
+   - Wenn Meldung Event hat und Teams in der DB: Auswertung von
+     detected_start_number / detected_box_number / pit_lane_or_garage_context
+     gegen die Starterlisten-Struktur (planned_event_teams).
+   - Bei Treffer: Anpassung von caption, image_title, keywords; bei
+     Fehltreffer mit Nummer-Kontext: needs_review um Hinweis auf fehlende
+     Starterlisten-Zuordnung ergänzt.
+
+c) Schreiben in die Datenbank (GenerateImageMetadata Job)
+   - Standard: KI befüllt nur **leere** Felder (image_title, caption,
+     media_keywords, photographer, description).
+   - **Ausnahme:** Wenn planned_event_enrichment.matched === true, werden
+     image_title, caption und media_keywords **auch überschrieben**, wenn
+     sie bereits Werte hatten (Kommentar im Job: zuverlässige
+     Starterlisten-basierte Ausgabe).
+
+5. Kurzfassung für Stakeholder
+------------------------------
+| Bereich                         | Mit geplantem Event an der Meldung |
+|---------------------------------|-------------------------------------|
+| Formular Metadaten speichern    | Unverändert aktiv                  |
+| EXIF/IPTC-Lesen beim Öffnen     | Unverändert                        |
+| IPTC-Einbettung nach Speichern  | Unverändert                        |
+| Redaction / Kennzeichen-Blur    | Gesperrt (UI + Server)             |
+| KI-Metadaten                    | Mehr Kontext im Prompt; nach KI   |
+|                                 | DB-Abgleich Starterliste; bei      |
+|                                 | Match ggf. harte Überschreibung   |
+|                                 | von Titel/Unterschrift/Keywords   |
+
+6. Relevante Code-Stellen (Orientierung)
+----------------------------------------
+- routes/admin_web_group.php: Route news.media.edit / news.media.update
+- app/Http/Controllers/Admin/NewsItemController.php:
+  editMedia, updateMedia, redactionLockedForNewsItem,
+  redirectRedactionLockedByPlannedEvent
+- resources/views/admin/news/media/edit.blade.php:
+  Formular mediaMetaForm; $redactionBlockedByPlannedEvent
+- app/Services/MediaAi/ImageMetadataGenerator.php: buildContext,
+  buildUserPrompt
+- app/Services/MediaAi/PlannedEventMetadataEnricher.php: enrich
+- app/Jobs/GenerateImageMetadata.php: Verwendung des Enrichers,
+  Überschreib-Logik bei enrichment matched
+
+================================================================================
+Ende der Analyse
+================================================================================

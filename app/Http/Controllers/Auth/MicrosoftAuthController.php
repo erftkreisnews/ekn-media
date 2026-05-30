@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\AdminPermissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -115,12 +116,13 @@ class MicrosoftAuthController extends Controller
         );
 
         Auth::login($user, remember: true);
+        $request->session()->regenerate();
 
         // Gleiche Ziel-Logik wie beim normalen Login
-        if (method_exists($user, 'can') && $user->can('access_admin')) {
-            return redirect()->intended(route('admin.news.index'));
+        if ($user->can(AdminPermissions::ACCESS)) {
+            return redirect()->intended(route('admin.news.index', absolute: false));
         }
 
-        return redirect()->intended('/');
+        return redirect()->intended(route('dashboard', absolute: false));
     }
 }

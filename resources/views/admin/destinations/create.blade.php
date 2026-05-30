@@ -32,9 +32,13 @@
             <div class="mt-2"><label class="block text-sm font-medium text-gray-700">Zielpfad (Remote)</label><input type="text" name="remote_path" value="{{ old('remote_path', '/') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm" placeholder="/"></div>
             <div class="mt-2" x-show="type === 'ftp' || type === 'ftps'"><label class="inline-flex items-center"><input type="checkbox" name="passive" value="1" {{ old('passive', true) ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48]"><span class="ml-2 text-sm">Passiv-Modus</span></label></div>
             <div class="mt-2"><label class="block text-sm font-medium text-gray-700">Timeout (Sekunden)</label><input type="number" name="timeout" value="{{ old('timeout', 20) }}" min="5" max="120" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
-            <div class="mt-2"><label class="inline-flex items-center"><input type="checkbox" name="wdr_subfolder_per_item" value="1" {{ old('wdr_subfolder_per_item') ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48]"><span class="ml-2 text-sm">WDR-Format: Unterordner pro Meldung (Jahr_Monat_Tag_Ort_Titel, MoID vorrangig)</span></label></div>
+            <div class="mt-2 space-y-2">
+                <label class="inline-flex items-start gap-2"><input type="checkbox" name="ekn_live_folder_format" value="1" {{ old('ekn_live_folder_format') ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48] mt-0.5"><span class="text-sm"><span class="font-medium">EKN Live-Format:</span> Unterordner <code class="text-xs bg-gray-100 px-1 rounded">DD_MM_JJJJ-Titel bis zum:</code>, Videodateiname = Speicher-/Ingest-Name (z. B. <code class="text-xs bg-gray-100 px-1 rounded">…-sendefassung-…</code>)</span></label>
+                <label class="inline-flex items-start gap-2"><input type="checkbox" name="wdr_subfolder_per_item" value="1" {{ old('wdr_subfolder_per_item') ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48] mt-0.5"><span class="text-sm">WDR-Format (nur wenn EKN Live-Format aus)</span></label>
+            </div>
         </div>
 
+        @can('admin.customers.billing_sensitive')
         <div class="border-t border-gray-200 pt-4 mt-4">
             <h2 class="text-base font-semibold text-gray-900 mb-3">Externe Identifikatoren</h2>
             <p class="text-sm text-gray-600 mb-3">z. B. dpa Autorennummer, BILD Lieferanten-ID, WDR Lieferantennummer – werden bei Versand/E-Mail/Upload genutzt.</p>
@@ -50,6 +54,7 @@
                 <label class="inline-flex items-center"><input type="checkbox" name="generate_sidecar" value="1" {{ old('generate_sidecar') ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48]"><span class="ml-2 text-sm">Sidecar-Datei (z. B. .meta.json) beim Upload mitsenden</span></label>
             </div>
         </div>
+        @endcan
 
         <div class="flex gap-3 pt-4"><button type="submit" class="px-4 py-2 text-sm font-medium rounded-md text-white bg-[#092E48]">Anlegen</button><a href="{{ $backUrl }}" class="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white">Abbrechen</a></div>
     </form>

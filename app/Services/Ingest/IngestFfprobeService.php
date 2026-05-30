@@ -62,10 +62,6 @@ class IngestFfprobeService
             $durationS = round((float) $videoStream['duration'], 4);
         }
 
-        if ($durationS === null || $durationS <= 0) {
-            return ['ok' => false, 'error' => 'Dauer ungültig oder 0.'];
-        }
-
         $width = isset($videoStream['width']) ? (int) $videoStream['width'] : null;
         $height = isset($videoStream['height']) ? (int) $videoStream['height'] : null;
         $codec = isset($videoStream['codec_name']) ? (string) $videoStream['codec_name'] : null;
@@ -85,6 +81,17 @@ class IngestFfprobeService
             }
         }
 
+        $isStaticImage = $this->isStaticImageStream($absolutePath, $videoStream, $durationS);
+
+        if (($durationS === null || $durationS <= 0) && ! $isStaticImage) {
+            return ['ok' => false, 'error' => 'Dauer ungültig oder 0.'];
+        }
+
+        if ($isStaticImage) {
+            $durationS = null;
+            $fps = null;
+        }
+
         return [
             'ok' => true,
             'data' => [
@@ -94,9 +101,29 @@ class IngestFfprobeService
                 'fps' => $fps,
                 'codec' => $codec,
                 'has_audio' => $hasAudio,
+                'is_static_image' => $isStaticImage,
                 'ffprobe_json' => $json,
             ],
         ];
+    }
+
+    /**
+     * JPEG u. ä.: ein Bild-„Video“-Stream (z. B. mjpeg), oft ohne sinnvolle Dauer in ffprobe.
+     */
+    private function isStaticImageStream(string $absolutePath, array $videoStream, ?float $durationS): bool
+    {
+        if ($durationS !== null && $durationS > 0) {
+            return false;
+        }
+
+        $ext = strtolower(pathinfo($absolutePath, PATHINFO_EXTENSION));
+        if (in_array($ext, ['jpg', 'jpeg', 'jpe'], true)) {
+            return true;
+        }
+
+        $codec = strtolower((string) ($videoStream['codec_name'] ?? ''));
+
+        return in_array($codec, ['mjpeg', 'png', 'gif'], true);
     }
 
     public function hasAudioStream(string $absolutePath): bool

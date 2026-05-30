@@ -7,11 +7,13 @@ use App\Services\MediaStorage;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
+use Illuminate\Queue\Attributes\DeleteWhenMissingModels;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Symfony\Component\Process\Process;
 
+#[DeleteWhenMissingModels]
 class ProcessMediaRedaction implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
@@ -128,15 +130,31 @@ class ProcessMediaRedaction implements ShouldQueue
         }
 
         $userError = null;
+        $isNoDetection = false;
         if (is_array($decoded) && ! empty($decoded['error'])) {
             $err = $decoded['error'];
-            $userError = str_contains(strtolower($err), 'no boxes') || str_contains(strtolower($err), 'no detection')
-                ? 'Es wurden keine Bereiche automatisch erkannt. Bitte Boxen manuell eintragen (z. B. Gesichter oder Kennzeichen) und die Redaction erneut ausführen.'
+            $isNoDetection = str_contains(strtolower($err), 'no boxes') || str_contains(strtolower($err), 'no detection');
+            $userError = $isNoDetection
+                ? null
                 : $err;
         } elseif ($stderr !== '') {
             $userError = strlen($stderr) > 500 ? substr($stderr, 0, 497).'…' : $stderr;
         }
         $userError = $userError ?: 'Skript-Fehler (Exit-Code '.$process->getExitCode().'). Details: storage/logs/laravel.log';
+
+        if ($isNoDetection) {
+            Log::info('ProcessMediaRedaction: nothing to redact (no detection)', [
+                'media_id' => $this->media->id,
+            ]);
+            $this->media->update([
+                'redaction_status' => NewsItemMedia::REDACTION_DONE,
+                'redacted_path' => null,
+                'redaction_error' => null,
+                'redacted_at' => now(),
+            ]);
+
+            return;
+        }
 
         if ($process->getExitCode() !== 0 || empty($decoded['success'])) {
             Log::warning('ProcessMediaRedaction: auto-redaction failed (fail-safe)', [

@@ -5,6 +5,27 @@
 
     RewriteEngine On
 
+    # Canonical URL: HTTPS + ohne www (brand-spezifisch)
+    # koelnimage.de bleibt auf koelnimage.de, EKN bleibt auf erftkreis-news.media
+    RewriteCond %{HTTP_HOST} ^www\.koelnimage\.de$ [NC]
+    RewriteRule ^ https://koelnimage.de%{REQUEST_URI} [R=301,L]
+
+    RewriteCond %{HTTP_HOST} ^www\.erftkreis-news\.media$ [NC]
+    RewriteRule ^ https://erftkreis-news.media%{REQUEST_URI} [R=301,L]
+
+    # Kompatibilität: Früherer Redirect konnte /events auf EKN hosten -> dort 404.
+    # Deshalb Events-URLs auf die korrekte KoelnImage-Domain umleiten.
+    RewriteCond %{HTTP_HOST} ^(?:www\.)?erftkreis-news\.media$ [NC]
+    RewriteRule ^events(?:/.*)?$ https://koelnimage.de%{REQUEST_URI} [R=301,L]
+
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP_HOST} ^koelnimage\.de$ [NC]
+    RewriteRule ^ https://koelnimage.de%{REQUEST_URI} [R=301,L]
+
+    RewriteCond %{HTTPS} !=on
+    RewriteCond %{HTTP_HOST} ^erftkreis-news\.media$ [NC]
+    RewriteRule ^ https://erftkreis-news.media%{REQUEST_URI} [R=301,L]
+
     # Handle Authorization Header
     RewriteCond %{HTTP:Authorization} .
     RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
@@ -17,6 +38,14 @@
     RewriteCond %{REQUEST_FILENAME} !-d
     RewriteCond %{REQUEST_URI} (.+)/$
     RewriteRule ^ %1 [L,R=301]
+
+    # Legacy-Einstiegspunkte dauerhaft auf Startseite umleiten (statt 404)
+    RewriteRule ^(?:picture|search|random|tags|about|notification)\.php$ / [R=301,L,NC,QSD]
+    RewriteRule ^LICENSES(?:/.*)?$ / [R=301,L,NC,QSD]
+
+    # Nur direkte Browser-Aufrufe von /index.php umleiten, interner Front-Controller bleibt intakt
+    RewriteCond %{THE_REQUEST} \s/+index\.php(?:[?\s]|$) [NC]
+    RewriteRule ^index\.php$ / [R=301,L,NC,QSD]
 
     # Send Requests To Front Controller...
     RewriteCond %{REQUEST_FILENAME} !-d

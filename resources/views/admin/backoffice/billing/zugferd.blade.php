@@ -163,9 +163,6 @@
                 @if($product->billing_name && $product->billing_name !== $product->billing_company)
                     <p>{{ $product->billing_name }}</p>
                 @endif
-                @if($contact?->name)
-                    <p>{{ $contact->name }}</p>
-                @endif
                 @if($product->billing_street)
                     <p>{{ $product->billing_street }}</p>
                 @endif
@@ -186,7 +183,7 @@
             </div>
             <div class="meta-block">
                 <p><strong>Rechnungsnr.:</strong> {{ $documentNumber }}</p>
-                <p><strong>Kundennr.:</strong> {{ $product->buyer_reference ?: '–' }}</p>
+                <p><strong>Kundennr.:</strong> {{ $product->resolvedBuyerReference() ?: '–' }}</p>
                 <p><strong>Datum:</strong> {{ optional($invoice->voucher_date)->format('d.m.Y') ?: '–' }}</p>
                 <p><strong>Lieferdatum:</strong> {{ optional($usageRecords->first()?->used_at)->format('d.m.Y') ?: '–' }}</p>
                 <p><strong>Kunde:</strong> {{ $organization->name }}</p>

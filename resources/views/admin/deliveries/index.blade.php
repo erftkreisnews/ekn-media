@@ -87,7 +87,7 @@
                                     @endphp
                                     <tr
                                         class="hover:bg-gray-50/50 align-middle"
-                                        x-show="matches(`{{ Str::lower($title.' '.$d->recipient_email.' '.($d->newsItem->id ?? '')) }}`)"
+                                        x-show="matches(@js(Str::lower($title.' '.$d->recipient_email.' '.($d->newsItem->id ?? ''))))"
                                     >
                                         <td class="px-4 py-3 text-sm">
                                             <a href="{{ route('admin.news.edit', $d->newsItem) }}" class="text-[#092E48] hover:underline">
@@ -141,7 +141,7 @@
                         @endphp
                         <article
                             class="rounded-2xl border border-slate-200/80 bg-white shadow-sm px-4 py-3"
-                            x-show="matches(`{{ Str::lower($title.' '.$d->recipient_email.' '.($d->newsItem->id ?? '')) }}`)"
+                            x-show="matches(@js(Str::lower($title.' '.$d->recipient_email.' '.($d->newsItem->id ?? ''))))"
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
@@ -234,9 +234,8 @@
                                 $firstItem = $items->firstWhere('status', '!=', 'skipped') ?? $items->first();
                                 $newsItem = $firstItem?->media?->newsItem;
                                 $folder = null;
-                                if ($newsItem && $dest && in_array($type, ['ftp','ftps','sftp'], true)) {
-                                    // WDR: Unterordner-Name wie beim Upload verwendet
-                                    $folder = $newsItem->wdr_subfolder_name;
+                                if ($newsItem && $dest && in_array($type, ['ftp','ftps','sftp'], true) && $dest->usesFtpSubfolderPerNewsItem()) {
+                                    $folder = $newsItem->ftpSubfolderNameForDestination($dest);
                                 }
                                 $total = $items->where('status', '!=', 'skipped')->count();
                                 $success = $items->where('status', 'success')->count();

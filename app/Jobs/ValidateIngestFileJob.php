@@ -2,8 +2,11 @@
 
 namespace App\Jobs;
 
+use App\Jobs\GenerateIngestPreviewJob;
 use App\Models\IngestFile;
 use App\Services\Ingest\IngestFfprobeService;
+use App\Services\Ingest\IngestImageThumbnailService;
+use App\Services\Ingest\IngestVideoPosterService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -18,7 +21,7 @@ class ValidateIngestFileJob implements ShouldQueue
         protected int $ingestFileId
     ) {}
 
-    public function handle(IngestFfprobeService $ffprobe): void
+    public function handle(IngestFfprobeService $ffprobe, IngestImageThumbnailService $thumbs, IngestVideoPosterService $posters): void
     {
         $file = IngestFile::find($this->ingestFileId);
         if (! $file) {
@@ -50,13 +53,32 @@ class ValidateIngestFileJob implements ShouldQueue
         $d = $result['data'];
         $file->update([
             'status' => IngestFile::STATUS_VALIDATED,
-            'duration_s' => $d['duration_s'],
-            'width' => $d['width'],
-            'height' => $d['height'],
-            'fps' => $d['fps'],
-            'codec' => $d['codec'],
+            'duration_s' => $d['duration_s'] ?? null,
+            'width' => $d['width'] ?? null,
+            'height' => $d['height'] ?? null,
+            'fps' => $d['fps'] ?? null,
+            'codec' => $d['codec'] ?? null,
             'ffprobe_json' => $d['ffprobe_json'] ?? null,
             'error_message' => null,
         ]);
+
+        if ($file->isIngestImageFile()) {
+            $thumbs->ensureThumbnail($file->fresh(), force: true);
+
+            return;
+        }
+
+        if ($file->fresh()?->isIngestVideoFile()) {
+            $posters->ensurePoster($file->fresh(), force: false);
+        }
+
+        if ($file->fresh()?->isIngestVideoCandidate() && config('ingest.preview.auto_after_validation', true)) {
+            $file->update([
+                'status' => IngestFile::STATUS_PREVIEW_GENERATING,
+                'preview_status' => IngestFile::PREVIEW_STATUS_GENERATING,
+                'preview_error_message' => null,
+            ]);
+            GenerateIngestPreviewJob::dispatch($file->id);
+        }
     }
 }

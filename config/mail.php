@@ -128,4 +128,15 @@ return [
     */
     'contact_address' => env('MAIL_CONTACT_ADDRESS', env('MAIL_FROM_ADDRESS', 'hello@example.com')),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Neukunden-Anfrage (öffentliches Formular)
+    |--------------------------------------------------------------------------
+    |
+    | Empfänger für Anfragen von /neukunden (ohne E-Mail im HTML). Fallback:
+    | Kontaktadresse aus .env.
+    |
+    */
+    'neukunden_inquiry_to' => env('NEUKUNDEN_INQUIRY_TO', env('MAIL_CONTACT_ADDRESS', env('MAIL_FROM_ADDRESS', 'hello@example.com'))),
+
 ];

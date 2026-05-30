@@ -9,6 +9,7 @@ use App\Models\DeliveryRun;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Services\DeliveryDestinationConnectionTester;
+use App\Support\AdminPermissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -306,13 +307,15 @@ class DeliveryDestinationController extends Controller
         $validated['passive'] = $request->boolean('passive', true);
         $validated['timeout'] = isset($validated['timeout']) ? (int) $validated['timeout'] : 20;
 
-        $validated['external_reference_label'] = $request->input('external_reference_label') ? trim($request->input('external_reference_label')) : null;
-        $validated['external_author_id'] = $request->input('external_author_id') ? trim($request->input('external_author_id')) : null;
-        $validated['external_supplier_id'] = $request->input('external_supplier_id') ? trim($request->input('external_supplier_id')) : null;
-        $validated['external_vendor_code'] = $request->input('external_vendor_code') ? trim($request->input('external_vendor_code')) : null;
-        $validated['include_in_email'] = $request->boolean('include_in_email', true);
-        $validated['include_in_filename'] = $request->boolean('include_in_filename', false);
-        $validated['generate_sidecar'] = $request->boolean('generate_sidecar', false);
+        if ($request->user()?->can(AdminPermissions::CUSTOMERS_BILLING_SENSITIVE)) {
+            $validated['external_reference_label'] = $request->input('external_reference_label') ? trim($request->input('external_reference_label')) : null;
+            $validated['external_author_id'] = $request->input('external_author_id') ? trim($request->input('external_author_id')) : null;
+            $validated['external_supplier_id'] = $request->input('external_supplier_id') ? trim($request->input('external_supplier_id')) : null;
+            $validated['external_vendor_code'] = $request->input('external_vendor_code') ? trim($request->input('external_vendor_code')) : null;
+            $validated['include_in_email'] = $request->boolean('include_in_email', true);
+            $validated['include_in_filename'] = $request->boolean('include_in_filename', false);
+            $validated['generate_sidecar'] = $request->boolean('generate_sidecar', false);
+        }
 
         if (in_array($validated['type'], ['ftp', 'ftps', 'sftp'], true)) {
             $request->validate([
@@ -367,6 +370,7 @@ class DeliveryDestinationController extends Controller
         }
         $config = $dest->config_json ?? [];
         $config['wdr_subfolder_per_item'] = $request->boolean('wdr_subfolder_per_item');
+        $config['ekn_live_folder_format'] = $request->boolean('ekn_live_folder_format');
         $dest->config_json = $config;
         $dest->save();
     }

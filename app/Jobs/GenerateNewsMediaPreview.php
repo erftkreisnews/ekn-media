@@ -21,6 +21,8 @@ class GenerateNewsMediaPreview implements ShouldQueue
 
     protected const DEFAULT_WEBP_QUALITY = 80;
 
+    protected const DEFAULT_AVIF_QUALITY = 55;
+
     protected const PREVIEW_WATERMARK_RATIO = 0.10;
 
     protected const PREVIEW_WATERMARK_OPACITY = 15;
@@ -38,6 +40,8 @@ class GenerateNewsMediaPreview implements ShouldQueue
         protected string $watermarkPath,
         protected int $maxPreviewWidth = self::DEFAULT_MAX_PREVIEW_WIDTH,
         protected int $webpQuality = self::DEFAULT_WEBP_QUALITY,
+        protected int $avifQuality = self::DEFAULT_AVIF_QUALITY,
+        protected bool $generateAvif = true,
         protected bool $generateThumb = true,
     ) {}
 
@@ -76,6 +80,18 @@ class GenerateNewsMediaPreview implements ShouldQueue
                 'visibility' => 'public',
                 'ContentType' => 'image/webp',
             ]);
+
+            // Optional: AVIF-Variante der Preview (gleiche Abmessungen/Wasserzeichen)
+            if ($this->generateAvif && method_exists($previewImage, 'toAvif')) {
+                $avifPath = $this->deriveAvifPath($this->previewPath);
+                if ($avifPath !== '') {
+                    $avifBytes = (string) $previewImage->toAvif($this->avifQuality);
+                    $disk->put($avifPath, $avifBytes, [
+                        'visibility' => 'public',
+                        'ContentType' => 'image/avif',
+                    ]);
+                }
+            }
 
             // Optional: Thumbnail (thumb/{name}.webp, max 480px, quality 60, watermark opacity 18)
             if ($this->generateThumb) {
@@ -118,5 +134,15 @@ class GenerateNewsMediaPreview implements ShouldQueue
         $watermarkWidth = (int) max(1, $image->width() * $widthRatio);
         $watermark->scale(width: $watermarkWidth);
         $image->place($watermark, 'center', 0, 0, $opacity);
+    }
+
+    protected function deriveAvifPath(string $previewPath): string
+    {
+        $trimmedPath = trim($previewPath);
+        if ($trimmedPath === '') {
+            return '';
+        }
+
+        return preg_replace('/\.[a-zA-Z0-9]+$/', '.avif', $trimmedPath) ?? '';
     }
 }

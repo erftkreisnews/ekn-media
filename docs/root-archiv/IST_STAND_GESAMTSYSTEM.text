@@ -1,0 +1,397 @@
+IST-STAND (GESAMTSYSTEM) - DOKUMENTATIONSFASSUNG
+Stand: 2026-04-23
+Projekt: Erftkreis News Media (Laravel 12)
+
+====================================================================
+0) ZIEL DIESES DOKUMENTS
+====================================================================
+Dieses Dokument beschreibt den aktuellen Systemzustand so, dass:
+- klar ist, welche Komponenten wo liegen,
+- welche Pfade auf welche Speicherorte zeigen,
+- welche Routen welche Module bedienen,
+- und welche Betriebsabhaengigkeiten (Queue, Worker, Storage, ENV) bestehen.
+
+====================================================================
+1) SYSTEM- UND PFAD-MAPPING (WICHTIG)
+====================================================================
+1.1) Projektwurzel (technisch)
+- Aktiver Projektpfad:
+  /usr/www/users/admin/media/laravel12
+
+1.2) Alternativer Zugriffspfad (IDE/Workspace)
+- Ebenfalls vorhanden:
+  /usr/home/admin/public_html/media/laravel12
+- Beide Pfade zeigen auf denselben Projektinhalt (gleiches Working Directory sichtbar).
+
+1.3) Web-/Storage-Symlink-Logik in Laravel
+- Konfiguriert in config/filesystems.php:
+  public_path('storage') => storage_path('app/public')
+- Daraus folgt:
+  /public/storage  ->  /storage/app/public
+
+====================================================================
+2) PROJEKTSTRUKTUR (TOP-LEVEL)
+====================================================================
+Wesentliche Verzeichnisse:
+- app/                 (Controller, Models, Jobs, Services, Middleware, Mail, Console)
+- bootstrap/           (App-Bootstrap inkl. Middleware-/Exception-Konfiguration)
+- config/              (Feature-/Infra-Konfigurationen)
+- database/            (Migrationen, Seeder)
+- resources/views/     (Blade-Templates)
+- resources/js, css/   (Frontend-Assets)
+- routes/              (Web/Auth/Admin/Console-Routen)
+- storage/             (Laufzeitdateien, Logs, Uploads je Disk)
+- tests/               (Feature-/Unit-Tests)
+- etc/supervisor/conf.d/ (Worker-Prozesskonfiguration)
+
+Wichtige Doku-Dateien im Root:
+- IST_STAND_GESAMTSYSTEM.text (dieses Dokument)
+- IST_STAND_SYSTEM.text
+- JETZT-STAND.md
+- DELIVERY-SYSTEM.md
+- SETUP-QUEUE.md
+
+====================================================================
+3) ROUTING-ARCHITEKTUR (WEB)
+====================================================================
+Hauptroute-Datei:
+- routes/web.php
+
+3.1) Oeffentliche Routen
+- /                       -> NewsController@index
+- /news/{slug}            -> NewsController@show
+- /robots.txt             -> SitemapController@robots
+- /sitemap.xml            -> SitemapController@index
+- /sitemap-news.xml       -> SitemapController@newsSitemap
+- /neukunden              -> NeukundenController (GET/POST)
+
+3.2) Witness-Portal
+- Primar unter Prefix /witness/e/{token}
+- Optional zusaetzlich unter eigener Domain via config('witness.portal_host')
+- Upload-Haertung:
+  - throttle:witness-show
+  - throttle:witness-upload
+  - witness.honeypot Middleware
+
+3.3) Delivery (ohne Login, mit Signierung/Throttle)
+- /d/{token}                          -> DeliveryController@show
+- /d/{token}/confirm                  -> DeliveryController@confirm
+- /d/{token}/m/{media}/stream         -> DeliveryController@stream (signed)
+- /d/{token}/m/{media}                -> DeliveryController@download
+- /d/{token}/m/{media}/video-xmp      -> DeliveryController@downloadVideoXmp (signed)
+
+3.4) Auth
+- Microsoft OAuth:
+  /auth/microsoft/redirect
+  /auth/microsoft/callback
+- Standardauth zusaetzlich via routes/auth.php
+
+3.5) Nach Login
+- /dashboard (Redirect auf /admin bei Admin-Recht)
+- /profile (edit/update/destroy)
+
+3.6) Admin-Route-Gruppe
+- Prefix: /admin
+- Middleware: auth + permission:access_admin + delete.confirm
+- Einbindung ueber:
+  routes/admin_web_group.php
+
+3.7) Kundenbereich
+- /kunden
+- Middleware: auth + permission:view_customer_area
+
+====================================================================
+4) ADMIN-MODULSTRUKTUR (routes/admin_web_group.php)
+====================================================================
+Modulbereiche (permissions-gesteuert):
+
+4.1) News-Modul
+- CRUD fuer News
+- Medienbearbeitung (inkl. Redaction, Video-Stills, AI-Status/AI-Request)
+- Statements, Updates, Witness-Links/Submissions
+- Versand aus News-Kontext (Mail/FTP), Send-Summary
+- Geocoding und Blocktext-Parsing
+
+4.2) Deliveries-Modul
+- Liste, Aktivitaet, Revoke
+
+4.3) Media-Modul
+- Video-, Image-, Audio-Uebersichten
+
+4.4) Ingest-Modul
+- Ingest-Liste, Statistik, Render-Jobs
+- Zuweisung, Playback, Preview-Playback
+- Render-Queue inkl. Cancel
+
+4.5) Settings-Modul
+- SEO, Backup, AI, Jobs
+- Planned Events + Teams + Schedule-Download
+- House Squad
+- Usage Tariffs
+- News Delete Audit
+- Presseportal Offices + Test
+
+4.6) Backoffice-Module
+- Backoffice Dashboard
+- Userverwaltung (create/store/edit/update/delete, Welcome-Mail)
+- Billing (inkl. PDF, ZUGFeRD, Lexware, Zahlung, Freigabe)
+- Usage Reports
+
+4.7) Customers-Module
+- Kundenstamm, Produkte, Kontakte, Destinationen
+- Import-/Test-/Upload-Funktionen
+- Schutz kritischer Delete-Endpunkte via zusaetzliche Permission
+
+====================================================================
+5) MIDDLEWARE- UND BOOTSTRAP-VERHALTEN
+====================================================================
+Datei: bootstrap/app.php
+
+Aktive Kernpunkte:
+- trustProxies fuer Reverse-Proxy/TLS-Setups aktiv
+- prepend web-group:
+  App\Http\Middleware\EnsureIngestSchema
+- append web-group:
+  App\Http\Middleware\XRobotsTag
+- Middleware-Aliase:
+  - role / permission / role_or_permission (Spatie)
+  - delete.confirm
+  - witness.honeypot
+- Exception-Verhalten:
+  Bei 403 und eingeloggt -> Redirect admin.dashboard mit Fehlermeldung
+
+====================================================================
+6) STORAGE- UND DATEISYSTEM-ARCHITEKTUR
+====================================================================
+Datei: config/filesystems.php
+
+6.1) Default-Disk
+- env(FILESYSTEM_DISK), Fallback: local
+
+6.2) Konfigurierte Disks
+- local:
+  root = storage/app/private
+- planned_schedule_legacy:
+  root = storage/app
+  (Fallback fuer aeltere planned-event-schedules Pfade)
+- public:
+  root = storage/app/public
+  url  = APP_URL + /storage
+- backups:
+  root = storage/app/backups
+- dropbox:
+  per DROPBOX_AUTH_TOKEN / DROPBOX_PATH_PREFIX
+- s3:
+  klassisch via AWS_* Variablen
+
+6.3) Public Link
+- /public/storage zeigt auf /storage/app/public
+
+====================================================================
+7) MEDIEN-/REDACTION-SYSTEM (BILD)
+====================================================================
+7.1) Pipeline
+- Laravel Job ProcessMediaRedaction
+- Python Worker detect_and_redact.py
+- Ausgabe in redacted Artefakt
+
+7.2) Status-/Auslieferlogik
+- redaction_status:
+  pending / done / failed / disabled / legacy(null)
+- Fail-safe:
+  pending/failed liefern oeffentlich kein ungeschuetztes Original aus.
+
+7.3) Aktueller Technikstand
+- False-Positive-Reduktion im Python-Skript adressiert
+- OCR-Whitelist-Pfad vorbereitet
+- OCR-Stack auf Server derzeit nicht aktiv:
+  - pytesseract fehlt
+  - tesseract binary fehlt
+- Daraus folgt:
+  heuristischer Non-OCR-Pfad ist aktuell aktiv.
+
+7.4) Artefaktverhalten
+- Alte redacted Dateien bleiben bestehen.
+- Neue Logik wirkt erst nach Reprocess je Medium.
+
+====================================================================
+8) VIDEO-INGEST / RENDER
+====================================================================
+8.1) Kernaussage
+- Render-Flow stabilisiert (frueherer Validator-Fehler adressiert).
+
+8.2) Betriebsbedingung
+- Vollfunktion nur mit laufenden Queue-Workern.
+
+8.3) Relevante Funktionspfade
+- Admin-Ingest-Endpunkte unter /admin/ingest/...
+- Renderjobs inkl. Status- und Cancel-Endpunkten vorhanden.
+
+====================================================================
+9) DELIVERY-/VERSANDSYSTEM
+====================================================================
+9.1) Konfigurationsdatei
+- config/newsdesk.php
+
+9.2) Wichtige Parameter
+- delivery_recipient
+- WDR-spezifische Versandregeln:
+  - wdr_organization_names
+  - wdr_allowed_emails
+- IPTC Standardwerte:
+  - iptc_credit
+  - iptc_copyright
+  - iptc_source
+- delivery_download_dedupe_seconds
+- delivery_download_notify_emails
+
+====================================================================
+10) WITNESS-/ZEUGENPORTAL
+====================================================================
+Datei: config/witness.php
+
+Wichtige Schalter:
+- portal_host (optionale eigene Domain)
+- portal_scheme
+- disk
+- max_file_kb
+- max_files_per_submit
+- legal_version
+- min_seconds_before_submit
+- locale
+- anonymous_photographer_label
+
+====================================================================
+11) QUEUE-/WORKER-BETRIEB
+====================================================================
+Supervisor-Konfiguration:
+- etc/supervisor/conf.d/laravel-worker.conf
+
+Aktuelle Kommandozeile:
+- php /usr/home/admin/public_html/media/laravel12/artisan queue:work --sleep=3 --tries=3 --timeout=14400
+
+Relevante Parameter:
+- timeout=14400 (auf lange Ingest-Jobs abgestimmt)
+- autostart=true / autorestart=true
+- stdout_logfile:
+  /usr/home/admin/public_html/media/laravel12/storage/logs/worker.log
+
+Hinweis:
+- Ohne stabile Worker laufen Redaction/Preview/Metadaten/Ingest-Render nicht konsistent.
+
+====================================================================
+12) AKTUELLER ARBEITSSTAND IM REPOSITORY
+====================================================================
+Stand der lokalen Arbeitskopie:
+- Branch: master
+- Geaenderte bestehende Dateien: 141
+- Neue unversionierte Dateien: 169
+- Summe geaenderter Dateien: 310
+
+Interpretation:
+- Sehr hohe parallele Aenderungsdichte.
+- Fuer dokumentierte Releases empfiehlt sich thematische Paketierung in kleinere Commits.
+
+====================================================================
+13) RISIKEN / QUALITAET
+====================================================================
+- Risiko A: Redaction ohne OCR hat semantische Grenzen.
+- Risiko B: Striktere Filter koennen Recall reduzieren.
+- Risiko C: Altartefakte verbergen neue Fix-Wirkung bis Reprocess.
+- Risiko D: Viele parallele Aenderungen erhoehen Regressionsrisiko.
+
+====================================================================
+14) EMPFOHLENE DOKUMENTATIONSFAEHIGE NEXT STEPS
+====================================================================
+1) Reprocess-Konzept fuer betroffene Bildbestaende dokumentieren und ausfuehren.
+2) OCR-Stack auf Produktionsworker installieren (tesseract + pytesseract).
+3) Git-Stand in Themenblöcke zerlegen (News, Ingest, Billing, Witness, Settings).
+4) Pro Themenblock:
+   - Smoke-Test,
+   - Fehlerprotokoll,
+   - sauberer Commit.
+5) Deployment-Checkliste verankern:
+   - Worker laufen
+   - Storage-Link korrekt
+   - APP_URL/FILESYSTEM_DISK/WITNESS/NEWSDESK-ENV plausibel
+   - zentrale Admin- und Delivery-Flows getestet
+
+====================================================================
+15) AKTUELLE GESAMTBEWERTUNG
+====================================================================
+- Gesamtprojekt lauffaehig: JA
+- Kritischer globaler Blocker: NEIN
+- Dokumentationsreife: HOCH (Struktur und Pfadmapping vorhanden)
+- Release-Reife des aktuellen ungesplitteten Arbeitsstands: EINGESCHRAENKT
+
+====================================================================
+16) KI-EINBINDUNG (IST-STAND)
+====================================================================
+16.1) Funktionsnahe KI-Punkte im System
+- News-Modul fuehrt AI-bezogene Bedienpunkte:
+  - AI-Status
+  - AI-Request
+- Settings-Modul enthaelt einen dedizierten Bereich "AI".
+- Medienkontext:
+  - Bild-Redaction ist derzeit regel-/heuristikbasiert mit Python-Worker.
+  - OCR ist vorbereitet, aber serverseitig aktuell nicht aktiv
+    (tesseract/pytesseract fehlen).
+
+16.2) Bewertung der aktuellen KI-Architektur
+- KI ist funktional in Admin-Prozesse eingebunden, nicht als isoliertes Add-on.
+- Die Integrationslogik ist derzeit operativ orientiert
+  (Status/Anforderung/Verarbeitung), weniger auf generative Endnutzerfeatures.
+- Betriebsreife haengt direkt an Queue-/Worker-Stabilitaet.
+- Transparenz ist gegeben, weil KI-nahe Funktionen im Admin klar verortet sind
+  (News + Settings + Medienpipeline).
+
+16.3) Technische Konsequenz fuer den Betrieb
+- Ohne Queue-Worker sinkt Zuverlaessigkeit KI-naher Prozessketten deutlich.
+- Fuer bessere Ergebnisqualitaet in sensiblen Medienfaellen ist OCR-Nachruestung
+  weiterhin der wichtigste Hebel.
+
+====================================================================
+17) EINORDNUNG: WECHSEL VON CHATGPT ZU CLAUDE (ENTSCHEIDUNGSPUNKT)
+====================================================================
+17.1) Worin der potenzielle Mehrwert eines Wechsels liegen kann
+- Langer, zusammenhaengender Analyse-/Dokufluss:
+  Claude wird oft als sehr stark bei umfangreicher Textkonsistenz,
+  Redaktionsarbeit und Spezifikationsdurchgaengen wahrgenommen.
+- Code-Review-/Refactoring-Kommunikation:
+  In vielen Teams liefert Claude eine sehr strukturierte Begruendungsqualitaet
+  bei Architektur- und Wartungsfragen.
+- Sicherheits-/Policy-orientierte Schreibweise:
+  Claude wird haeufig als defensiver in riskanten Vorschlaegen erlebt.
+
+17.2) Worin ChatGPT typischerweise stark bleibt
+- Breite Tool- und Integrationslandschaft sowie vielseitige Automationsfaehigkeit.
+- Sehr guter "Generalist"-Einsatz ueber Coding, Content und operative Assistenz.
+- Starke Geschwindigkeit bei kurzen iterativen Aufgaben.
+
+17.3) Praxisnahe Entscheidung fuer dieses Projekt
+- Kein Dogma "entweder/oder": sinnvoll ist ein aufgabenspezifischer Mischbetrieb.
+- Wechsel zu Claude ist besonders dann sinnvoll, wenn
+  - lange technische Dokumente,
+  - komplexe Review-Argumentationen,
+  - oder qualitative Spezifikationsarbeit priorisiert werden.
+- Bei hoher Tool-Last und schnellen Multi-Step-Operativaufgaben bleibt ChatGPT
+  weiterhin sehr zweckmaessig.
+
+17.4) Konkreter Pilotvorschlag (2-4 Wochen)
+1) 3 wiederkehrende Aufgabenarten definieren:
+   - technische Doku-Updates,
+   - Code-Review-Zusammenfassungen,
+   - Ticket-/Change-Beschreibungen.
+2) Jede Aufgabenart parallel mit ChatGPT und Claude fahren.
+3) Metriken vergleichen:
+   - Bearbeitungszeit,
+   - Nachbearbeitungsaufwand,
+   - fachliche Treffgenauigkeit,
+   - Teamakzeptanz.
+4) Danach entscheiden:
+   - Vollwechsel,
+   - Mischbetrieb,
+   - oder Verbleib bei ChatGPT.
+
+ENDE DOKUMENT
+

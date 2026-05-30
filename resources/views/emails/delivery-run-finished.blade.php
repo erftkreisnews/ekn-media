@@ -1,6 +1,7 @@
 @php
     $destination = $destination ?? null;
     $run = $run ?? null;
+    $wdrTransferNotice = $wdrTransferNotice ?? null;
 @endphp
 
 <!DOCTYPE html>
@@ -71,6 +72,35 @@
                             erfolgreich: <strong style="color: #059669;">{{ $success }}</strong>,
                             fehlgeschlagen: <strong style="color: #b91c1c;">{{ $failed }}</strong>
                         </p>
+
+                        @if(is_array($wdrTransferNotice) && !empty($wdrTransferNotice['news_ids']) && !empty($wdrTransferNotice['paths']))
+                            <div style="margin: 12px 0 0 0; padding: 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; font-size: 13px; color: #1e3a8a;">
+                                <p style="margin: 0 0 8px 0; font-weight: 600;">
+                                    Hinweis an den WDR-Newsroom:
+                                </p>
+                                <p style="margin: 0 0 8px 0;">
+                                    Das Material zur NewsID {{ implode(', ', $wdrTransferNotice['news_ids']) }}
+                                    wurde zusätzlich auf dem externen FTP-Cluster bereitgestellt.
+                                </p>
+                                <p style="margin: 0 0 6px 0;">
+                                    <strong>Server:</strong> {{ $wdrTransferNotice['host'] }}
+                                </p>
+                                @if(!empty($wdrTransferNotice['moids']))
+                                    <p style="margin: 0 0 6px 0;">
+                                        <strong>MoID:</strong> {{ implode(', ', $wdrTransferNotice['moids']) }}
+                                    </p>
+                                @endif
+                                <p style="margin: 0 0 6px 0; font-weight: 600;">Ablagepfad:</p>
+                                @foreach($wdrTransferNotice['paths'] as $remotePath)
+                                    <p style="margin: 0 0 4px 0; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;">
+                                        {{ $remotePath }}
+                                    </p>
+                                @endforeach
+                                <p style="margin: 8px 0 0 0;">
+                                    Bitte den Pfad an die zuständige TV-Planung weiterleiten.
+                                </p>
+                            </div>
+                        @endif
 
                         @if($failed > 0)
                             <p style="font-size: 12px; color: #b91c1c; margin: 8px 0 0 0;">

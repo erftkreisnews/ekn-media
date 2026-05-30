@@ -12,6 +12,7 @@ use App\Models\UsageRecord;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Permission\Middleware\PermissionMiddleware;
@@ -131,6 +132,123 @@ class BillingSendInvoiceTest extends TestCase
 
         Mail::assertNothingSent();
         $this->assertArrayNotHasKey('dispatch', (array) ($invoice->fresh()->meta ?? []));
+    }
+
+    public function test_it_records_bank_payment_in_invoice_meta(): void
+    {
+        $user = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.test',
+            'password' => 'password',
+        ]);
+
+        $invoice = $this->createInvoice();
+
+        $this->withoutMiddleware(PermissionMiddleware::class)
+            ->actingAs($user)
+            ->post(route('admin.backoffice.billing.payment', $invoice), [
+                'payment_received_on' => '2026-04-09',
+                'payment_amount_gross' => '1.234,56',
+                'payment_bank_reference' => 'RE 2026 123',
+                'payment_note' => 'Kontoauszug April',
+            ])
+            ->assertRedirect(route('admin.backoffice.billing.show', ['invoice' => $invoice->id]).'#zahlungseingang')
+            ->assertSessionHas('status');
+
+        $invoice->refresh();
+        $payment = (array) (($invoice->meta ?? [])['payment'] ?? []);
+        $this->assertSame('2026-04-09', $payment['received_on'] ?? null);
+        $this->assertSame(1234.56, $payment['amount_gross'] ?? null);
+        $this->assertSame('RE 2026 123', $payment['bank_reference'] ?? null);
+        $this->assertSame('Kontoauszug April', $payment['note'] ?? null);
+        $this->assertSame($user->id, $payment['recorded_by_user_id'] ?? null);
+    }
+
+    public function test_it_syncs_lexware_payment_snapshot_when_lexware_invoice_exists(): void
+    {
+        Config::set('lexware.base_url', 'https://api.lexware.io');
+        Config::set('lexware.api_token', 'test-token');
+
+        Http::fake([
+            'https://api.lexware.io/v1/payments/*' => Http::response([
+                'openAmount' => '0.00',
+                'currency' => 'EUR',
+                'paymentStatus' => 'balanced',
+                'voucherStatus' => 'paid',
+                'voucherType' => 'salesinvoice',
+                'paymentItems' => [],
+            ], 200),
+        ]);
+
+        $user = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.test',
+            'password' => 'password',
+        ]);
+
+        $invoice = $this->createInvoice([
+            'lexware_invoice_id' => 'ebb48e10-e20a-11ee-9cde-7789c0d1fa1c',
+            'voucher_number' => 'R-1',
+            'status' => 'lexware_open',
+        ]);
+
+        $this->withoutMiddleware(PermissionMiddleware::class)
+            ->actingAs($user)
+            ->post(route('admin.backoffice.billing.payment', $invoice), [
+                'payment_received_on' => '2026-04-09',
+            ])
+            ->assertRedirect(route('admin.backoffice.billing.show', ['invoice' => $invoice->id]).'#zahlungseingang');
+
+        $invoice->refresh();
+        $lw = (array) (($invoice->meta ?? [])['lexware_payment'] ?? []);
+        $this->assertSame('paid', $lw['voucher_status'] ?? null);
+        $this->assertSame('lexware_open', $invoice->status);
+        $this->assertArrayNotHasKey('sync_error', $lw);
+        Http::assertSent(function (\Illuminate\Http\Client\Request $request) {
+            return str_starts_with($request->url(), 'https://api.lexware.io/v1/payments/')
+                && $request->method() === 'GET';
+        });
+    }
+
+    public function test_it_marks_invoice_as_voided_when_lexware_reports_voided(): void
+    {
+        Config::set('lexware.base_url', 'https://api.lexware.io');
+        Config::set('lexware.api_token', 'test-token');
+
+        Http::fake([
+            'https://api.lexware.io/v1/payments/*' => Http::response([
+                'openAmount' => '0.00',
+                'currency' => 'EUR',
+                'paymentStatus' => 'balanced',
+                'voucherStatus' => 'voided',
+                'voucherStatusReason' => 'Beleg wurde in Lexware storniert (Dublettenkorrektur).',
+                'voucherType' => 'salesinvoice',
+                'paymentItems' => [],
+            ], 200),
+        ]);
+
+        $user = User::create([
+            'name' => 'Admin',
+            'email' => 'admin@example.test',
+            'password' => 'password',
+        ]);
+
+        $invoice = $this->createInvoice([
+            'lexware_invoice_id' => 'ebb48e10-e20a-11ee-9cde-7789c0d1fa1c',
+            'voucher_number' => 'R-1',
+            'status' => 'lexware_open',
+        ]);
+
+        $this->withoutMiddleware(PermissionMiddleware::class)
+            ->actingAs($user)
+            ->post(route('admin.backoffice.billing.lexware-payment-sync', $invoice))
+            ->assertRedirect(route('admin.backoffice.billing.show', ['invoice' => $invoice->id]).'#zahlungseingang');
+
+        $invoice->refresh();
+        $lw = (array) (($invoice->meta ?? [])['lexware_payment'] ?? []);
+        $this->assertSame('voided', $lw['voucher_status'] ?? null);
+        $this->assertSame('Beleg wurde in Lexware storniert (Dublettenkorrektur).', $lw['void_reason'] ?? null);
+        $this->assertSame('lexware_voided', $invoice->status);
     }
 
     protected function createInvoice(array $invoiceOverrides = []): Invoice

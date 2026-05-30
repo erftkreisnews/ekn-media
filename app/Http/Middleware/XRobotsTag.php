@@ -10,69 +10,64 @@ use Symfony\Component\HttpFoundation\Response;
 class XRobotsTag
 {
     /**
-     * Setzt den X-Robots-Tag HTTP-Header.
-     *
-     * Öffentliche Seiten: index, follow
-     * Interne/Admin-Bereiche: noindex, nofollow
+     * Setzt den X-Robots-Tag HTTP-Header und teilt den Wert mit Views (meta robots).
      */
     public function handle(Request $request, Closure $next): Response
     {
         /** @var \Symfony\Component\HttpFoundation\Response $response */
         $response = $next($request);
 
-        // robots-Support in dieser Reihenfolge (wichtig für unterschiedliche noindex Varianten):
-        // 1) noindex,nofollow: Admin/Auth/Delivery/System
-        // 2) noindex,follow: Suche/Filter/Parameterseiten (Query-Parameter auf Startseite)
-        // 3) index,follow: Artikel-Detail + Startseite ohne Query
-
-        // 1) noindex,nofollow (System-/Interne Seiten)
         $isNoIndexNoFollow =
             $request->is('admin*')
             || $request->is('login')
             || $request->is('register')
-            // Auth-/Password- und Account-Seiten (Laravel-Built-in)
             || $request->is('forgot-password')
             || $request->is('reset-password/*')
             || $request->is('verify-email*')
             || $request->is('confirm-password')
             || $request->is('password/*')
             || $request->is('profile*')
-            || $request->is('kunden*')
-            // Delivery-Links (auch verschachtelt)
-            // d/{token}               -> d/*
-            // d/{token}/confirm       -> d/*/*
-            // d/{token}/m/{media}     -> d/*/*/*
+            || ($request->is('kunden*') && ! $request->routeIs('koelnimage.customer.downloads'))
             || $request->is('d/*')
             || $request->is('d/*/*')
             || $request->is('d/*/*/*')
-            // OAuth-/Auth-Callbacks
-            || $request->is('auth/*');
+            || $request->is('auth/*')
+            || $request->is('witness/*')
+            || $request->routeIs('witness.upload.show', 'witness.upload.store', 'witness.portal.show', 'witness.portal.store');
 
-        // 2) noindex,follow (Suche/Filter/Parameterseiten)
         $page = (int) $request->query('page', 1);
         $q = trim((string) $request->query('q', ''));
         $queryKeys = array_keys($request->query());
         $hasOtherQueryParams = array_diff($queryKeys, ['page', 'q']) !== [];
+        $path = trim((string) $request->path(), '/');
+        $isFrontendHome = $request->routeIs('home') || $path === '';
 
         $isNoIndexFollowForQuery =
-            // Startseite-Route mit Query-Parametern
-            $request->is('/') && (
+            $isFrontendHome && (
                 $q !== ''
                 || $page > 1
                 || $hasOtherQueryParams
             );
 
+        $koelnimageGalleryQuery = $request->routeIs('koelnimage.gallery.photos') && count($request->query()) > 0;
+        $koelnimageEventsQuery = $request->routeIs('koelnimage.events.index') && count($request->query()) > 0;
+        $koelnimageGalleriesQuery = $request->routeIs('koelnimage.galleries.index') && count($request->query()) > 0;
+        $koelnimageGalleriesPaginationOnly = $request->routeIs('koelnimage.galleries.index')
+            && count($request->query()) === 1
+            && $request->has('page')
+            && (int) $request->query('page', 1) >= 2;
+        $isKoelnimageNoIndexFollow = $koelnimageGalleryQuery
+            || $koelnimageEventsQuery
+            || ($koelnimageGalleriesQuery && ! $koelnimageGalleriesPaginationOnly);
+
         $robotsValue = 'index, follow';
         if ($isNoIndexNoFollow) {
             $robotsValue = 'noindex, nofollow';
-        } elseif ($isNoIndexFollowForQuery) {
+        } elseif ($isNoIndexFollowForQuery || $isKoelnimageNoIndexFollow) {
             $robotsValue = 'noindex, follow';
         }
 
         $response->headers->set('X-Robots-Tag', $robotsValue);
-
-        // Damit Meta-robots im Head konsistent mit dem Header ist.
-        // (views können diesen Wert dann direkt verwenden)
         View::share('robotsMeta', $robotsValue);
 
         return $response;

@@ -67,7 +67,7 @@ class NewsItemMediaRedactionTest extends TestCase
         $this->assertTrue($media->isSafeForPublic());
     }
 
-    /** Bei failed ist public_path null. */
+    /** Bei failed (echter Fehler) ist public_path null. */
     public function test_public_path_is_null_when_redaction_failed(): void
     {
         $newsItem = $this->createNewsItem();
@@ -76,11 +76,29 @@ class NewsItemMediaRedactionTest extends TestCase
             'path' => 'news-media/1/image/000001.jpg',
             'original_name' => 'test.jpg',
             'redaction_status' => NewsItemMedia::REDACTION_FAILED,
+            'redaction_error' => 'Skript-Fehler (Exit-Code 2).',
         ]);
         Storage::disk('public')->put($media->path, 'fake');
 
         $this->assertNull($media->public_path);
         $this->assertFalse($media->isSafeForPublic());
+    }
+
+    /** Keine Erkennung = done ohne redacted_path → Original auslieferbar. */
+    public function test_public_path_uses_original_when_redaction_done_without_redacted_file(): void
+    {
+        $newsItem = $this->createNewsItem();
+        $media = $newsItem->media()->create([
+            'type' => 'image',
+            'path' => 'news-media/1/image/000001.jpg',
+            'original_name' => 'test.jpg',
+            'redaction_status' => NewsItemMedia::REDACTION_DONE,
+            'redacted_path' => null,
+        ]);
+        Storage::disk('public')->put($media->path, 'fake');
+
+        $this->assertSame($media->path, $media->public_path);
+        $this->assertTrue($media->isSafeForPublic());
     }
 
     /** Legacy (redaction_status null) liefert path für Rückwärtskompatibilität. */

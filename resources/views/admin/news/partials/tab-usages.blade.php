@@ -1,9 +1,9 @@
 {{-- Tab „Verwendungen“ – alle Verwendungen zur News-ID (UsageRecord) --}}
-<div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden">
-    <div class="px-6 py-4 border-b border-gray-200">
+<div class="bg-white shadow-sm rounded-lg border border-gray-200 overflow-hidden min-w-0 max-w-full">
+    <div class="px-4 sm:px-6 py-4 border-b border-gray-200">
         <h2 class="text-base font-semibold text-gray-900">Verwendungen zur Meldung @if(isset($newsItem) && $newsItem)#{{ $newsItem->id }}@endif</h2>
     </div>
-    <div class="px-6 py-6">
+    <div class="px-4 sm:px-6 py-4 sm:py-6">
         @if(isset($newsItem) && $newsItem)
             @if(($newsItem->usageRecords ?? collect())->isEmpty())
                 <p class="text-sm text-gray-500">Bisher keine Verwendungen zu dieser Meldung erfasst.</p>
@@ -20,6 +20,7 @@
                                 <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Format / Nutzungsrecht</th>
                                 <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Bilder</th>
                                 <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Video‑Min.</th>
+                                <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Radio‑Min.</th>
                                 <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Betrag (netto)</th>
                                 <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wide">Aktion</th>
                             </tr>
@@ -49,6 +50,7 @@
                                     </td>
                                     <td class="px-4 py-2 text-right text-gray-900">{{ $record->images_count }}</td>
                                     <td class="px-4 py-2 text-right text-gray-900">{{ number_format((float) $record->video_minutes, 1, ',', '.') }}</td>
+                                    <td class="px-4 py-2 text-right text-gray-900">{{ number_format((float) ($record->radio_minutes ?? 0), 1, ',', '.') }}</td>
                                     <td class="px-4 py-2 text-right text-gray-900 whitespace-nowrap">{{ number_format((float) $record->total_amount, 2, ',', '.') }} €</td>
                                     <td class="px-4 py-2 text-right whitespace-nowrap">
                                         @if($record->invoice_id && $record->invoice)

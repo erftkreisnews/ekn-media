@@ -7,8 +7,12 @@ use App\Models\DeliveryDestination;
 use App\Models\DeliveryRun;
 use App\Models\NewsItem;
 use App\Models\NewsItemMedia;
+use App\Services\ImageMetadataReader;
+use App\Services\ImageMetadataWriter;
 use App\Services\MediaStorage;
+use App\Services\VideoMetadataXmpService;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -17,21 +21,43 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use phpseclib3\Net\SFTP as PhpseclibSftp;
 
-class UploadMediaToDestinationJob implements ShouldQueue
+class UploadMediaToDestinationJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
 
+    public int $uniqueFor = 900;
+
     public function __construct(
         public int $deliveryDestinationId,
         public array $mediaIds,
         public int $runId = 0
-    ) {}
+    ) {
+        $this->mediaIds = $this->normalizedMediaIds();
+    }
+
+    public function uniqueId(): string
+    {
+        return 'destination:'.$this->deliveryDestinationId.'|media:'.implode(',', $this->normalizedMediaIds());
+    }
+
+    /**
+     * @return int[]
+     */
+    private function normalizedMediaIds(): array
+    {
+        return array_values(array_unique(array_filter(
+            array_map(static fn ($id): int => (int) $id, $this->mediaIds),
+            static fn (int $id): bool => $id > 0
+        )));
+    }
 
     public function handle(): void
     {
-        $destination = DeliveryDestination::find($this->deliveryDestinationId);
+        $destination = DeliveryDestination::query()
+            ->with('organization')
+            ->find($this->deliveryDestinationId);
         if (! $destination) {
             return;
         }
@@ -61,20 +87,18 @@ class UploadMediaToDestinationJob implements ShouldQueue
     }
 
     /**
-     * Bei WDR-Format: nach Meldung gruppieren, Unterordner = MoID oder Jahr_Monat_Tag_Ort_Titel.
+     * Bei WDR-/EKN-Format: nach Meldung gruppieren (Unterordner pro Meldung).
      *
      * @return array<int, array{subfolder: string, media_ids: int[]}>
      */
     private function groupMediaByNewsItem(DeliveryDestination $destination): array
     {
-        // Für WDR-Ziele immer pro Meldung einen Unterordner (MoID oder Jahr_Monat_Tag_Ort_Titel)
-        $useWdr = $this->isWdrDestination($destination)
-            || ! empty($destination->config_json['wdr_subfolder_per_item'] ?? false);
-        if (! $useWdr) {
-            return [0 => ['subfolder' => '', 'media_ids' => $this->mediaIds]];
+        $mediaIds = $this->normalizedMediaIds();
+        if (! $destination->usesFtpSubfolderPerNewsItem()) {
+            return [0 => ['subfolder' => '', 'media_ids' => $mediaIds]];
         }
         $byItem = [];
-        foreach ($this->mediaIds as $mediaId) {
+        foreach ($mediaIds as $mediaId) {
             $media = NewsItemMedia::find($mediaId);
             $nid = $media ? $media->news_item_id : 0;
             if (! isset($byItem[$nid])) {
@@ -84,7 +108,9 @@ class UploadMediaToDestinationJob implements ShouldQueue
         }
         foreach ($byItem as $nid => &$g) {
             if ($nid && ($newsItem = NewsItem::find($nid))) {
-                $g['subfolder'] = $newsItem->wdr_subfolder_name;
+                $g['subfolder'] = $destination->usesEknLiveFolderFormat()
+                    ? $newsItem->ftpEknLiveFolderName()
+                    : $newsItem->wdr_subfolder_name;
             } else {
                 $g['subfolder'] = 'Meldung_'.$nid;
             }
@@ -107,43 +133,22 @@ class UploadMediaToDestinationJob implements ShouldQueue
         return $ok;
     }
 
-    /** WDR: Es dürfen nur Videos hochgeladen werden, keine Bilder. */
+    /** WDR/EKN: nur Videos; sonst bei WDR-Unterordner-Option nur Videos. */
     private function shouldUploadMediaForDestination(DeliveryDestination $destination, NewsItemMedia $media): bool
     {
-        // Für WDR-Ziele grundsätzlich nur Videos (keine Bilder) hochladen
-        if ($this->isWdrDestination($destination)) {
+        if ($destination->usesEknLiveFolderFormat()) {
             return $media->type === 'video';
         }
 
-        // Sonst nur bei aktivierter WDR-Unterordner-Option einschränken
+        if ($destination->isWdrOrganizationDestination()) {
+            return $media->type === 'video';
+        }
+
         if (empty($destination->config_json['wdr_subfolder_per_item'] ?? false)) {
             return true;
         }
 
         return $media->type === 'video';
-    }
-
-    /**
-     * Ermittelt, ob es sich um ein WDR-Versandziel handelt (Organisationname enthält "WDR" etc.).
-     */
-    private function isWdrDestination(DeliveryDestination $destination): bool
-    {
-        $org = $destination->relationLoaded('organization')
-            ? $destination->organization
-            : $destination->organization;
-
-        if (! $org || ! isset($org->name)) {
-            return false;
-        }
-
-        $names = config('newsdesk.wdr_organization_names', ['WDR', 'Westdeutscher Rundfunk']);
-        foreach ($names as $name) {
-            if ($name !== '' && stripos($org->name, $name) !== false) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /** Auslieferungs-Dateiname: optional mit externem Suffix (vendor_code/author_id/supplier_id). */
@@ -158,6 +163,22 @@ class UploadMediaToDestinationJob implements ShouldQueue
         $ext = isset($pathInfo['extension']) ? '.'.$pathInfo['extension'] : '';
 
         return $base.'_'.$suffix.$ext;
+    }
+
+    /**
+     * Auslieferungs-Dateiname: EKN = Ordner fest, Dateiname = produktiver Basisname (Ingest/Sendefassung).
+     */
+    private function resolveDeliveredFilename(
+        DeliveryDestination $destination,
+        ?NewsItem $newsItem,
+        ?NewsItemMedia $media,
+        string $localBasename
+    ): string {
+        if ($newsItem && $media && $destination->usesEknLiveFolderFormat() && $media->type === 'video') {
+            return $newsItem->ftpEknLiveRemoteVideoFilename($media);
+        }
+
+        return $this->getDeliveredFilename($destination, $localBasename);
     }
 
     /**
@@ -186,6 +207,47 @@ class UploadMediaToDestinationJob implements ShouldQueue
         ];
 
         return json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    }
+
+    /**
+     * Vor FTP/SFTP: DB aus EXIF/IPTC der Datei angleichen und JPEG-IPTC/XMP aus der DB neu schreiben,
+     * damit Empfänger (z. B. Imago) nicht veraltete IPTC-Daten vom Veröffentlichungstag sehen.
+     */
+    private function syncImageFileMetadataBeforeRemoteUpload(NewsItemMedia $media, array $resolved, string $fullPath): void
+    {
+        if (! $media->isImage() || ! is_file($fullPath) || ! is_readable($fullPath)) {
+            return;
+        }
+
+        $ext = strtolower(pathinfo($fullPath, PATHINFO_EXTENSION));
+        if (! in_array($ext, ['jpg', 'jpeg'], true)) {
+            return;
+        }
+
+        try {
+            $meta = ImageMetadataReader::read($fullPath);
+            $media->syncCaptureTimeFromMetadata($meta);
+            $media->refresh();
+
+            if (! is_writable($fullPath)) {
+                Log::warning('ftp_delivery.image_metadata_skip_not_writable', [
+                    'media_id' => $media->id,
+                    'path' => $fullPath,
+                ]);
+
+                return;
+            }
+
+            $written = ImageMetadataWriter::write($fullPath, $media->resolvedIptcForEmbed());
+            if ($written && ($resolved['temporary'] ?? false) === true && filled($media->path)) {
+                app(MediaStorage::class)->putFromLocalFile($media->path, $fullPath, ['visibility' => 'public']);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ftp_delivery.image_metadata_sync_failed', [
+                'media_id' => $media->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function uploadViaFtp(DeliveryDestination $destination, DeliveryRun $run): void
@@ -269,7 +331,7 @@ class UploadMediaToDestinationJob implements ShouldQueue
                 $resolved = app(MediaStorage::class)->resolveReadableLocalPath($media->path);
                 $fullPath = $resolved['path'] ?? null;
                 $originalBasename = basename($media->path);
-                $deliveredFilename = $this->getDeliveredFilename($destination, $originalBasename);
+                $deliveredFilename = $this->resolveDeliveredFilename($destination, $newsItem, $media, $originalBasename);
                 $item->update(['filename' => $deliveredFilename]);
                 if (! is_string($fullPath) || ! is_file($fullPath)) {
                     $item->update(['status' => 'failed', 'message' => 'Datei nicht gefunden']);
@@ -277,13 +339,32 @@ class UploadMediaToDestinationJob implements ShouldQueue
 
                     continue;
                 }
+                $this->syncImageFileMetadataBeforeRemoteUpload($media, $resolved, $fullPath);
                 $remoteFile = $subfolder === '' ? $deliveredFilename : $subfolder.'/'.$deliveredFilename;
                 if (@ftp_put($conn, $remoteFile, $fullPath, FTP_BINARY)) {
+                    if ($this->shouldTransferVideoXmp($destination, $media)) {
+                        $remoteXmp = $subfolder === ''
+                            ? $this->buildDeliveredXmpFilename($deliveredFilename)
+                            : $subfolder.'/'.$this->buildDeliveredXmpFilename($deliveredFilename);
+                        $xmpOk = $this->uploadGeneratedVideoXmpSidecar(
+                            $media,
+                            $remoteXmp,
+                            fn (string $remotePath, string $localPath): bool => @ftp_put($conn, $remotePath, $localPath, FTP_ASCII)
+                        );
+                        if (! $xmpOk) {
+                            $item->update(['status' => 'failed', 'message' => 'Video ok, XMP-Upload fehlgeschlagen']);
+                            $failed++;
+                            app(MediaStorage::class)->cleanupResolvedPath($resolved);
+
+                            continue;
+                        }
+                    }
                     $item->update(['status' => 'success']);
                     if ($destination->generate_sidecar) {
                         $sidecarFiles[] = [
                             'original_name' => $media->original_name ?? $originalBasename,
                             'delivered_name' => $deliveredFilename,
+                            'capture_time' => $media->capture_time?->toIso8601String(),
                             'size_bytes' => (int) @filesize($fullPath),
                             'sha256' => @hash_file('sha256', $fullPath) ?: '',
                         ];
@@ -309,11 +390,12 @@ class UploadMediaToDestinationJob implements ShouldQueue
         }
 
         ftp_close($conn);
+        $totalMedia = count($this->normalizedMediaIds());
         $this->finishRun(
             $run,
             $destination,
             $failed === 0 ? 'success' : 'failed',
-            $failed === 0 ? null : $failed.' von '.count($this->mediaIds).' fehlgeschlagen'
+            $failed === 0 ? null : $failed.' von '.$totalMedia.' fehlgeschlagen'
         );
     }
 
@@ -413,7 +495,7 @@ class UploadMediaToDestinationJob implements ShouldQueue
                 $resolved = app(MediaStorage::class)->resolveReadableLocalPath($media->path);
                 $fullPath = $resolved['path'] ?? null;
                 $originalBasename = basename($media->path);
-                $deliveredFilename = $this->getDeliveredFilename($destination, $originalBasename);
+                $deliveredFilename = $this->resolveDeliveredFilename($destination, $newsItem, $media, $originalBasename);
                 $item->update(['filename' => $deliveredFilename]);
                 if (! is_string($fullPath) || ! is_file($fullPath)) {
                     $item->update(['status' => 'failed', 'message' => 'Datei nicht gefunden']);
@@ -421,6 +503,7 @@ class UploadMediaToDestinationJob implements ShouldQueue
 
                     continue;
                 }
+                $this->syncImageFileMetadataBeforeRemoteUpload($media, $resolved, $fullPath);
                 $remoteFile = $dirPath === '' ? $deliveredFilename : $dirPath.'/'.$deliveredFilename;
                 $stream = @fopen('ssh2.sftp://'.(int) $sftp.'/'.ltrim($remoteFile, '/'), 'w');
                 if ($stream === false) {
@@ -438,11 +521,39 @@ class UploadMediaToDestinationJob implements ShouldQueue
                     continue;
                 }
                 @fclose($stream);
+                if ($this->shouldTransferVideoXmp($destination, $media)) {
+                    $remoteXmp = $dirPath === ''
+                        ? $this->buildDeliveredXmpFilename($deliveredFilename)
+                        : $dirPath.'/'.$this->buildDeliveredXmpFilename($deliveredFilename);
+                    $xmpOk = $this->uploadGeneratedVideoXmpSidecar(
+                        $media,
+                        $remoteXmp,
+                        function (string $remotePath, string $localPath) use ($sftp): bool {
+                            $xmpStream = @fopen('ssh2.sftp://'.(int) $sftp.'/'.ltrim($remotePath, '/'), 'w');
+                            if ($xmpStream === false) {
+                                return false;
+                            }
+                            $data = @file_get_contents($localPath);
+                            $ok = $data !== false && @fwrite($xmpStream, $data) !== false;
+                            @fclose($xmpStream);
+
+                            return $ok;
+                        }
+                    );
+                    if (! $xmpOk) {
+                        $item->update(['status' => 'failed', 'message' => 'Video ok, XMP-Upload fehlgeschlagen']);
+                        $failed++;
+                        app(MediaStorage::class)->cleanupResolvedPath($resolved);
+
+                        continue;
+                    }
+                }
                 $item->update(['status' => 'success']);
                 if ($destination->generate_sidecar) {
                     $sidecarFiles[] = [
                         'original_name' => $media->original_name ?? $originalBasename,
                         'delivered_name' => $deliveredFilename,
+                        'capture_time' => $media->capture_time?->toIso8601String(),
                         'size_bytes' => (int) @filesize($fullPath),
                         'sha256' => @hash_file('sha256', $fullPath) ?: '',
                     ];
@@ -464,11 +575,12 @@ class UploadMediaToDestinationJob implements ShouldQueue
             }
         }
 
+        $totalMedia = count($this->normalizedMediaIds());
         $this->finishRun(
             $run,
             $destination,
             $failed === 0 ? 'success' : 'failed',
-            $failed === 0 ? null : $failed.' von '.count($this->mediaIds).' fehlgeschlagen'
+            $failed === 0 ? null : $failed.' von '.$totalMedia.' fehlgeschlagen'
         );
     }
 
@@ -551,7 +663,7 @@ class UploadMediaToDestinationJob implements ShouldQueue
                 $resolved = app(MediaStorage::class)->resolveReadableLocalPath($media->path);
                 $fullPath = $resolved['path'] ?? null;
                 $originalBasename = basename($media->path);
-                $deliveredFilename = $this->getDeliveredFilename($destination, $originalBasename);
+                $deliveredFilename = $this->resolveDeliveredFilename($destination, $newsItem, $media, $originalBasename);
                 $item->update(['filename' => $deliveredFilename]);
                 if (! is_string($fullPath) || ! is_file($fullPath)) {
                     $item->update(['status' => 'failed', 'message' => 'Datei nicht gefunden']);
@@ -559,6 +671,7 @@ class UploadMediaToDestinationJob implements ShouldQueue
 
                     continue;
                 }
+                $this->syncImageFileMetadataBeforeRemoteUpload($media, $resolved, $fullPath);
                 $remoteFile = $dirPath === '' ? $deliveredFilename : $dirPath.'/'.$deliveredFilename;
                 if (! @$sftp->put($remoteFile, $fullPath, PhpseclibSftp::SOURCE_LOCAL_FILE)) {
                     $item->update(['status' => 'failed', 'message' => 'SFTP put fehlgeschlagen']);
@@ -566,11 +679,29 @@ class UploadMediaToDestinationJob implements ShouldQueue
 
                     continue;
                 }
+                if ($this->shouldTransferVideoXmp($destination, $media)) {
+                    $remoteXmp = $dirPath === ''
+                        ? $this->buildDeliveredXmpFilename($deliveredFilename)
+                        : $dirPath.'/'.$this->buildDeliveredXmpFilename($deliveredFilename);
+                    $xmpOk = $this->uploadGeneratedVideoXmpSidecar(
+                        $media,
+                        $remoteXmp,
+                        fn (string $remotePath, string $localPath): bool => (bool) @$sftp->put($remotePath, $localPath, PhpseclibSftp::SOURCE_LOCAL_FILE)
+                    );
+                    if (! $xmpOk) {
+                        $item->update(['status' => 'failed', 'message' => 'Video ok, XMP-Upload fehlgeschlagen']);
+                        $failed++;
+                        app(MediaStorage::class)->cleanupResolvedPath($resolved);
+
+                        continue;
+                    }
+                }
                 $item->update(['status' => 'success']);
                 if ($destination->generate_sidecar) {
                     $sidecarFiles[] = [
                         'original_name' => $media->original_name ?? $originalBasename,
                         'delivered_name' => $deliveredFilename,
+                        'capture_time' => $media->capture_time?->toIso8601String(),
                         'size_bytes' => (int) @filesize($fullPath),
                         'sha256' => @hash_file('sha256', $fullPath) ?: '',
                     ];
@@ -585,11 +716,12 @@ class UploadMediaToDestinationJob implements ShouldQueue
             }
         }
 
+        $totalMedia = count($this->normalizedMediaIds());
         $this->finishRun(
             $run,
             $destination,
             $failed === 0 ? 'success' : 'failed',
-            $failed === 0 ? null : $failed.' von '.count($this->mediaIds).' fehlgeschlagen'
+            $failed === 0 ? null : $failed.' von '.$totalMedia.' fehlgeschlagen'
         );
     }
 
@@ -604,6 +736,51 @@ class UploadMediaToDestinationJob implements ShouldQueue
         }
 
         return ': '.$err;
+    }
+
+    private function shouldTransferVideoXmp(DeliveryDestination $destination, NewsItemMedia $media): bool
+    {
+        return $media->isVideo() && ! $destination->isWdrOrganizationDestination();
+    }
+
+    private function buildDeliveredXmpFilename(string $deliveredVideoFilename): string
+    {
+        $base = pathinfo($deliveredVideoFilename, PATHINFO_FILENAME);
+        if ($base === '') {
+            $base = $deliveredVideoFilename;
+        }
+
+        return $base.'.xmp';
+    }
+
+    /**
+     * @param  callable(string, string): bool  $uploader  function (remotePath, localPath): bool
+     */
+    private function uploadGeneratedVideoXmpSidecar(NewsItemMedia $media, string $remoteXmpPath, callable $uploader): bool
+    {
+        $tmpXmp = tempnam(sys_get_temp_dir(), 'video_xmp_');
+        if ($tmpXmp === false) {
+            return false;
+        }
+
+        try {
+            $content = app(VideoMetadataXmpService::class)->generateForVideoMedia($media);
+            if (@file_put_contents($tmpXmp, $content) === false) {
+                return false;
+            }
+
+            return $uploader($remoteXmpPath, $tmpXmp);
+        } catch (\Throwable $e) {
+            Log::warning('video_xmp_upload.generate_failed', [
+                'media_id' => $media->id,
+                'remote' => $remoteXmpPath,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        } finally {
+            @unlink($tmpXmp);
+        }
     }
 
     /**

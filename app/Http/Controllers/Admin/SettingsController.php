@@ -3,18 +3,26 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SaveNewsWebTextAiPromptRequest;
 use App\Jobs\ExtractAudioMetadata;
 use App\Jobs\ExtractVideoMetadata;
 use App\Jobs\GenerateImageMetadata;
+use App\Models\NewsItemDeleteAudit;
 use App\Models\NewsItemMedia;
+use App\Models\SiteSetting;
 use App\Services\GoogleSearchConsoleService;
+use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 use Laravel\Socialite\Facades\Socialite;
 
@@ -34,9 +42,126 @@ class SettingsController extends Controller
         private GoogleSearchConsoleService $gsc
     ) {}
 
-    public function index(): View|RedirectResponse
+    public function index(): View
     {
         return view('admin.settings.index');
+    }
+
+    public function usageTariffs(): View
+    {
+        $this->ensureAdminRole();
+
+        $tariffs = [
+            'wdr_newsroom_video_price_per_minute' => $this->getPositiveDecimalSetting(
+                SiteSetting::WDR_NEWSROOM_VIDEO_PRICE_PER_MINUTE,
+                448.60
+            ),
+            'wdr_newsroom_image_first_price' => $this->getPositiveDecimalSetting(
+                SiteSetting::WDR_NEWSROOM_IMAGE_FIRST_PRICE,
+                42.37
+            ),
+            'wdr_newsroom_image_additional_price' => $this->getPositiveDecimalSetting(
+                SiteSetting::WDR_NEWSROOM_IMAGE_ADDITIONAL_PRICE,
+                28.25
+            ),
+            'wdr_newsroom_image_from_five_price' => $this->getPositiveDecimalSetting(
+                SiteSetting::WDR_NEWSROOM_IMAGE_FROM_FIVE_PRICE,
+                28.25
+            ),
+            'wdr_newsroom_audio_price_per_minute' => $this->getPositiveDecimalSetting(
+                SiteSetting::WDR_NEWSROOM_AUDIO_PRICE_PER_MINUTE,
+                0.00
+            ),
+        ];
+
+        return view('admin.settings.usage-tariffs', compact('tariffs'));
+    }
+
+    public function usageTariffsSave(Request $request): RedirectResponse
+    {
+        $this->ensureAdminRole();
+
+        $validated = $request->validate([
+            'wdr_newsroom_video_price_per_minute' => ['required', 'numeric', 'min:0'],
+            'wdr_newsroom_image_first_price' => ['required', 'numeric', 'min:0'],
+            'wdr_newsroom_image_additional_price' => ['required', 'numeric', 'min:0'],
+            'wdr_newsroom_image_from_five_price' => ['required', 'numeric', 'min:0'],
+            'wdr_newsroom_audio_price_per_minute' => ['required', 'numeric', 'min:0'],
+        ]);
+
+        SiteSetting::put(
+            SiteSetting::WDR_NEWSROOM_VIDEO_PRICE_PER_MINUTE,
+            number_format((float) $validated['wdr_newsroom_video_price_per_minute'], 2, '.', '')
+        );
+        SiteSetting::put(
+            SiteSetting::WDR_NEWSROOM_IMAGE_FIRST_PRICE,
+            number_format((float) $validated['wdr_newsroom_image_first_price'], 2, '.', '')
+        );
+        SiteSetting::put(
+            SiteSetting::WDR_NEWSROOM_IMAGE_ADDITIONAL_PRICE,
+            number_format((float) $validated['wdr_newsroom_image_additional_price'], 2, '.', '')
+        );
+        SiteSetting::put(
+            SiteSetting::WDR_NEWSROOM_IMAGE_FROM_FIVE_PRICE,
+            number_format((float) $validated['wdr_newsroom_image_from_five_price'], 2, '.', '')
+        );
+        SiteSetting::put(
+            SiteSetting::WDR_NEWSROOM_AUDIO_PRICE_PER_MINUTE,
+            number_format((float) $validated['wdr_newsroom_audio_price_per_minute'], 2, '.', '')
+        );
+
+        return redirect()
+            ->route('admin.settings.usage-tariffs')
+            ->with('status', 'WDR-Tarife wurden gespeichert.');
+    }
+
+    public function eventPlanning(): View
+    {
+        $eventPlanningEnabled = SiteSetting::get(SiteSetting::MEDIA_AI_EVENT_PLANNING_ENABLED) === '1';
+        $eventPlanningContext = (string) (SiteSetting::get(SiteSetting::MEDIA_AI_EVENT_PLANNING_CONTEXT) ?? '');
+
+        return view('admin.settings.event-planning', compact('eventPlanningEnabled', 'eventPlanningContext'));
+    }
+
+    public function eventPlanningSave(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'event_planning_context' => ['nullable', 'string', 'max:60000'],
+        ]);
+
+        SiteSetting::put(
+            SiteSetting::MEDIA_AI_EVENT_PLANNING_ENABLED,
+            $request->boolean('event_planning_enabled') ? '1' : '0'
+        );
+
+        $text = trim((string) ($validated['event_planning_context'] ?? ''));
+        SiteSetting::put(SiteSetting::MEDIA_AI_EVENT_PLANNING_CONTEXT, $text);
+
+        return redirect()
+            ->route('admin.settings.planned-events.global')
+            ->with('status', 'Zusatz-Vorgaben gespeichert.');
+    }
+
+    // PATCH: add news delete audit settings tab
+    public function newsDeleteAudit(Request $request): View
+    {
+        $q = trim((string) $request->query('q', ''));
+        $query = NewsItemDeleteAudit::query()
+            ->with('user')
+            ->orderByDesc('deleted_at')
+            ->orderByDesc('id');
+
+        if ($q !== '') {
+            $query->where(function ($sub) use ($q): void {
+                $sub->where('title', 'like', '%'.$q.'%')
+                    ->orWhere('slug', 'like', '%'.$q.'%')
+                    ->orWhere('news_item_id', is_numeric($q) ? (int) $q : -1);
+            });
+        }
+
+        $audits = $query->paginate(30)->withQueryString();
+
+        return view('admin.settings.news-delete-audit', compact('audits', 'q'));
     }
 
     public function seo(Request $request): View|RedirectResponse
@@ -217,13 +342,41 @@ class SettingsController extends Controller
             'retries' => config('media_ai.retries'),
         ];
 
+        $newsWebTextSystemPrompt = '';
+        if (Schema::hasTable('settings')) {
+            $newsWebTextSystemPrompt = (string) (SiteSetting::get(SiteSetting::NEWS_WEB_TEXT_AI_SYSTEM_PROMPT) ?? '');
+        }
+
         return view('admin.settings.ai', [
             'keySet' => $keySet,
             'statusOk' => $statusOk,
             'lastOkAt' => $lastOkAt,
             'lastError' => $lastError,
             'config' => $config,
+            'newsWebTextSystemPrompt' => $newsWebTextSystemPrompt,
+            'newsAiTextModel' => config('news_ai.text_model'),
+            'newsAiDefaultPromptPreview' => Str::limit((string) config('news_ai.default_system_prompt'), 400),
         ]);
+    }
+
+    public function aiSaveNewsWebTextPrompt(SaveNewsWebTextAiPromptRequest $request): RedirectResponse
+    {
+        if (! Schema::hasTable('settings')) {
+            return redirect()->route('admin.settings.ai')
+                ->with('ai_prompt_error', 'Die Datenbank-Tabelle „settings“ fehlt. Migration ausführen.');
+        }
+
+        $prompt = $request->validated()['news_web_text_ai_system_prompt'] ?? null;
+        $prompt = is_string($prompt) ? trim($prompt) : '';
+
+        if ($prompt === '') {
+            SiteSetting::query()->where('key', SiteSetting::NEWS_WEB_TEXT_AI_SYSTEM_PROMPT)->delete();
+        } else {
+            SiteSetting::put(SiteSetting::NEWS_WEB_TEXT_AI_SYSTEM_PROMPT, $prompt);
+        }
+
+        return redirect()->route('admin.settings.ai')
+            ->with('ai_prompt_saved', 'Leit-Prompt für Web-Text wurde gespeichert. Leeres Feld = Standard aus Konfiguration.');
     }
 
     /**
@@ -320,8 +473,10 @@ class SettingsController extends Controller
         $now = now();
         $maxAge = self::HEARTBEAT_MAX_AGE_SECONDS;
 
-        $cronOk = $cronLastAt && \Carbon\Carbon::parse($cronLastAt)->diffInSeconds($now) <= $maxAge;
-        $queueWorkerOk = $queueWorkerLastAt && \Carbon\Carbon::parse($queueWorkerLastAt)->diffInSeconds($now) <= $maxAge;
+        $cronOk = $cronLastAt && Carbon::parse($cronLastAt)->diffInSeconds($now) <= $maxAge;
+        $queueWorkerHeartbeatOk = $queueWorkerLastAt && Carbon::parse($queueWorkerLastAt)->diffInSeconds($now) <= $maxAge;
+        $queueWorkerBusy = $this->queueWorkerIsBusyWithLongJob();
+        $queueWorkerOk = $queueWorkerHeartbeatOk || $queueWorkerBusy;
 
         return view('admin.settings.jobs', [
             'countAiPending' => $countAiPending,
@@ -329,9 +484,265 @@ class SettingsController extends Controller
             'countAudio' => $countAudio,
             'cronOk' => $cronOk,
             'queueWorkerOk' => $queueWorkerOk,
-            'cronLastAt' => $cronLastAt ? \Carbon\Carbon::parse($cronLastAt) : null,
-            'queueWorkerLastAt' => $queueWorkerLastAt ? \Carbon\Carbon::parse($queueWorkerLastAt) : null,
+            'queueWorkerBusy' => $queueWorkerBusy,
+            'queueWorkerHeartbeatOk' => $queueWorkerHeartbeatOk,
+            'cronLastAt' => $this->jobsDisplayTimeFromHeartbeatCache($cronLastAt),
+            'queueWorkerLastAt' => $this->jobsDisplayTimeFromHeartbeatCache($queueWorkerLastAt),
+            'queueDb' => $this->queueDatabaseOverview(),
+            'jobsDisplayTimezone' => $this->jobsDisplayTimezoneLabel(),
         ]);
+    }
+
+    /**
+     * Anzeige-Zeitzone = APP_TIMEZONE (z. B. Europe/Berlin). Keine feste UTC-Annahme für DB-Zeiten,
+     * sonst +1h/+2h Versatz wenn MySQL/Laravel bereits lokale Zeit liefert.
+     */
+    private function jobsDisplayTimezone(): string
+    {
+        return (string) config('app.timezone', 'Europe/Berlin');
+    }
+
+    private function jobsDisplayTimezoneLabel(): string
+    {
+        $tz = $this->jobsDisplayTimezone();
+
+        return $tz !== '' ? $tz : 'Europe/Berlin';
+    }
+
+    /**
+     * Heartbeat aus Cache (ISO-8601) → Anzeige in APP_TIMEZONE.
+     */
+    private function jobsDisplayTimeFromHeartbeatCache(mixed $cached): ?Carbon
+    {
+        if ($cached === null || $cached === '') {
+            return null;
+        }
+
+        return Carbon::parse((string) $cached)->timezone($this->jobsDisplayTimezone());
+    }
+
+    /**
+     * Worker-Prozess läuft und bearbeitet einen reservierten Job (z. B. Ingest-Render).
+     * Heartbeat-Jobs auf „default“ kommen dann nicht durch — trotzdem aktiv.
+     */
+    private function queueWorkerIsBusyWithLongJob(): bool
+    {
+        if (! $this->queueWorkerProcessIsRunning()) {
+            return false;
+        }
+
+        $connectionName = (string) config('queue.default', 'database');
+        if ((string) config("queue.connections.{$connectionName}.driver", '') !== 'database') {
+            return true;
+        }
+
+        $jobsTable = (string) config("queue.connections.{$connectionName}.table", 'jobs');
+        if (! Schema::hasTable($jobsTable)) {
+            return false;
+        }
+
+        return DB::table($jobsTable)->whereNotNull('reserved_at')->exists();
+    }
+
+    private function queueWorkerProcessIsRunning(): bool
+    {
+        $output = shell_exec("pgrep -f 'artisan queue:work' 2>/dev/null");
+
+        return is_string($output) && trim($output) !== '';
+    }
+
+    /**
+     * failed_jobs.failed_at: wie von Laravel/MySQL geliefert parsen, dann in APP_TIMEZONE anzeigen.
+     */
+    private function jobsDisplayTimeFromFailedAt(mixed $failedAt): ?Carbon
+    {
+        if ($failedAt === null || $failedAt === '') {
+            return null;
+        }
+
+        return Carbon::parse((string) $failedAt)->timezone($this->jobsDisplayTimezone());
+    }
+
+    /**
+     * Zähler und Stichproben aus jobs / failed_jobs (nur bei database-Queue: offene Jobs in jobs).
+     *
+     * @return array<string, mixed>
+     */
+    private function queueDatabaseOverview(): array
+    {
+        $connectionName = (string) config('queue.default', 'database');
+        $driver = (string) config("queue.connections.{$connectionName}.driver", '');
+        $usesDbPending = $driver === 'database';
+        $jobsTable = (string) config("queue.connections.{$connectionName}.table", 'jobs');
+
+        $pendingTotal = 0;
+        $pendingByQueue = [];
+        $pendingSample = [];
+
+        if ($usesDbPending && Schema::hasTable($jobsTable)) {
+            $pendingTotal = (int) DB::table($jobsTable)->count();
+            $pendingByQueue = DB::table($jobsTable)
+                ->selectRaw('queue, count(*) as c')
+                ->groupBy('queue')
+                ->orderBy('queue')
+                ->get()
+                ->map(fn ($r) => ['queue' => $r->queue, 'c' => (int) $r->c])
+                ->all();
+            $rows = DB::table($jobsTable)->orderBy('id')->limit(50)->get(['id', 'queue', 'payload', 'available_at']);
+            foreach ($rows as $r) {
+                $p = json_decode($r->payload, true);
+                $name = is_array($p) ? (string) ($p['displayName'] ?? '?') : '?';
+                $pendingSample[] = [
+                    'id' => (int) $r->id,
+                    'queue' => (string) $r->queue,
+                    'name' => $name,
+                    'available_at' => $r->available_at
+                        ? Carbon::createFromTimestamp((int) $r->available_at)->timezone($this->jobsDisplayTimezone())
+                        : null,
+                ];
+            }
+        }
+
+        $failedTotal = 0;
+        $failedByQueue = [];
+        $failedSample = [];
+
+        if (Schema::hasTable('failed_jobs')) {
+            $failedTotal = (int) DB::table('failed_jobs')->count();
+            $failedByQueue = DB::table('failed_jobs')
+                ->selectRaw('queue, count(*) as c')
+                ->groupBy('queue')
+                ->orderBy('queue')
+                ->get()
+                ->map(fn ($r) => ['queue' => $r->queue, 'c' => (int) $r->c])
+                ->all();
+            $rows = DB::table('failed_jobs')->orderByDesc('failed_at')->limit(30)->get(['uuid', 'queue', 'connection', 'payload', 'exception', 'failed_at']);
+            foreach ($rows as $r) {
+                $p = json_decode($r->payload, true);
+                $name = is_array($p) ? (string) ($p['displayName'] ?? '?') : '?';
+                $ex = (string) $r->exception;
+                $exShort = Str::limit(preg_replace('/\s+/', ' ', strip_tags($ex)), 280);
+
+                $failedSample[] = [
+                    'uuid' => (string) $r->uuid,
+                    'queue' => (string) $r->queue,
+                    'connection' => (string) $r->connection,
+                    'name' => $name,
+                    'failed_at' => $this->jobsDisplayTimeFromFailedAt($r->failed_at),
+                    'exception_preview' => $exShort,
+                ];
+            }
+        }
+
+        return [
+            'connectionName' => $connectionName,
+            'driver' => $driver,
+            'usesDbPending' => $usesDbPending,
+            'pendingTotal' => $pendingTotal,
+            'pendingByQueue' => $pendingByQueue,
+            'pendingSample' => $pendingSample,
+            'failedTotal' => $failedTotal,
+            'failedByQueue' => $failedByQueue,
+            'failedSample' => $failedSample,
+        ];
+    }
+
+    /**
+     * Einen fehlgeschlagenen Job per UUID erneut einreihen (Artisan queue:retry mit einer UUID).
+     */
+    public function jobsFailedRetryOne(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'uuid' => ['required', 'string', 'regex:/^[0-9a-fA-F-]{36}$/'],
+        ]);
+        $uuid = (string) $data['uuid'];
+
+        if (! Schema::hasTable('failed_jobs')) {
+            return redirect()->route('admin.settings.jobs')
+                ->with('error', 'Tabelle failed_jobs ist nicht verfügbar.');
+        }
+
+        try {
+            $exit = Artisan::call('queue:retry', ['id' => [$uuid]]);
+            $output = trim(Artisan::output());
+            if ($exit !== 0) {
+                return redirect()->route('admin.settings.jobs')
+                    ->with('error', 'Wiederholen fehlgeschlagen (Exit-Code '.$exit.').');
+            }
+            if ($output !== '') {
+                Log::info('jobsFailedRetryOne artisan output', ['uuid' => $uuid, 'output' => $output]);
+            }
+
+            return redirect()->route('admin.settings.jobs')
+                ->with('status', 'Der Job wurde erneut in die Warteschlange gestellt.');
+        } catch (\Throwable $e) {
+            Log::error('jobsFailedRetryOne', ['uuid' => $uuid, 'message' => $e->getMessage()]);
+
+            return redirect()->route('admin.settings.jobs')
+                ->with('error', 'Wiederholen fehlgeschlagen: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Alle fehlgeschlagenen Jobs erneut einreihen (entspricht queue:retry all).
+     */
+    public function jobsFailedRetryAll(): RedirectResponse
+    {
+        if (! Schema::hasTable('failed_jobs')) {
+            return redirect()->route('admin.settings.jobs')
+                ->with('error', 'Tabelle failed_jobs ist nicht verfügbar.');
+        }
+
+        try {
+            $exit = Artisan::call('queue:retry', ['id' => ['all']]);
+            $output = trim(Artisan::output());
+            if ($exit !== 0) {
+                return redirect()->route('admin.settings.jobs')
+                    ->with('error', 'Wiederholen fehlgeschlagen (Exit-Code '.$exit.').');
+            }
+            if ($output !== '') {
+                Log::info('jobsFailedRetryAll artisan output', ['output' => $output]);
+            }
+
+            return redirect()->route('admin.settings.jobs')
+                ->with('status', 'Alle fehlgeschlagenen Jobs wurden erneut in die Warteschlange gestellt.');
+        } catch (\Throwable $e) {
+            Log::error('jobsFailedRetryAll', ['message' => $e->getMessage()]);
+
+            return redirect()->route('admin.settings.jobs')
+                ->with('error', 'Wiederholen fehlgeschlagen: '.$e->getMessage());
+        }
+    }
+
+    /**
+     * Tabelle failed_jobs leeren (entspricht queue:flush) – keine erneute Ausführung.
+     */
+    public function jobsFailedFlush(): RedirectResponse
+    {
+        if (! Schema::hasTable('failed_jobs')) {
+            return redirect()->route('admin.settings.jobs')
+                ->with('error', 'Tabelle failed_jobs ist nicht verfügbar.');
+        }
+
+        try {
+            $exit = Artisan::call('queue:flush');
+            $output = trim(Artisan::output());
+            if ($exit !== 0) {
+                return redirect()->route('admin.settings.jobs')
+                    ->with('error', 'Bereinigen fehlgeschlagen (Exit-Code '.$exit.').');
+            }
+            if ($output !== '') {
+                Log::info('jobsFailedFlush artisan output', ['output' => $output]);
+            }
+
+            return redirect()->route('admin.settings.jobs')
+                ->with('status', 'Die Liste der fehlgeschlagenen Jobs wurde geleert.');
+        } catch (\Throwable $e) {
+            Log::error('jobsFailedFlush', ['message' => $e->getMessage()]);
+
+            return redirect()->route('admin.settings.jobs')
+                ->with('error', 'Bereinigen fehlgeschlagen: '.$e->getMessage());
+        }
     }
 
     /**
@@ -371,5 +782,107 @@ class SettingsController extends Controller
         }
 
         return redirect()->route('admin.settings.jobs')->with('status', $message);
+    }
+
+    /**
+     * Presseportal: API-Key gegen api.presseportal.de prüfen (Story-Endpunkt).
+     */
+    public function presseportalTest(Request $request): RedirectResponse|\Illuminate\Http\JsonResponse
+    {
+        $apiKey = config('presseportal.api_key');
+        if (! is_string($apiKey) || trim($apiKey) === '') {
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => 'PRESSEPORTAL_API_KEY fehlt in .env.']);
+            }
+
+            return redirect()->route('admin.settings.presseportal')->with('presseportal_test_error', 'API-Key fehlt.');
+        }
+
+        $base = rtrim((string) config('presseportal.base_url', 'https://api.presseportal.de/api/v2'), '/');
+        $timeout = (int) config('presseportal.timeout', 20);
+        $endpoint = $base.'/story/1';
+
+        try {
+            $response = Http::timeout($timeout)->acceptJson()->get($endpoint, ['api_key' => $apiKey]);
+            $json = $response->json();
+            if (is_array($json) && isset($json['error']) && is_array($json['error'])) {
+                $code = (string) ($json['error']['code'] ?? '');
+                if ($code === '100') {
+                    throw new \RuntimeException('API meldet: Key nicht übermittelt.');
+                }
+                if (in_array($code, ['101', '102'], true)) {
+                    if ($request->wantsJson()) {
+                        return response()->json(['success' => false, 'message' => 'API-Key ungültig oder deaktiviert.']);
+                    }
+
+                    return redirect()->route('admin.settings.presseportal')->with('presseportal_test_error', 'API-Key ungültig oder deaktiviert.');
+                }
+                if ($code === '150') {
+                    $quotaMsg = 'API-Kontingent aufgebraucht (Quota exceeded). Bitte bei news aktuell nach einem höheren Kontingent fragen.';
+                    if ($request->wantsJson()) {
+                        return response()->json(['success' => false, 'message' => $quotaMsg]);
+                    }
+
+                    return redirect()->route('admin.settings.presseportal')->with('presseportal_test_error', $quotaMsg);
+                }
+            }
+
+            // Einzelabruf /story/{id} meldet oft nur „Ressource unknown“ (200), während der Import-Fallback /stories/office/… am Kontingent (150) scheitert.
+            $listResponse = Http::timeout($timeout)->acceptJson()->get($base.'/stories/office/1', [
+                'api_key' => $apiKey,
+                'limit' => 1,
+                'start' => 0,
+            ]);
+            $listJson = $listResponse->json();
+            if (is_array($listJson) && isset($listJson['error']) && is_array($listJson['error']) && (string) ($listJson['error']['code'] ?? '') === '150') {
+                $quotaMsg = 'API-Kontingent aufgebraucht (Quota exceeded). Der Abruf über „Text laden“ benötigt Listenabrufe – bitte bei news aktuell nach einem höheren Kontingent fragen.';
+                if ($request->wantsJson()) {
+                    return response()->json(['success' => false, 'message' => $quotaMsg]);
+                }
+
+                return redirect()->route('admin.settings.presseportal')->with('presseportal_test_error', $quotaMsg);
+            }
+
+            Log::info('Presseportal: Verbindungstest OK', ['http' => $response->status()]);
+            if ($request->wantsJson()) {
+                return response()->json(['success' => true, 'message' => 'API erreichbar, Key wird akzeptiert.']);
+            }
+
+            return redirect()->route('admin.settings.presseportal')->with('presseportal_test_ok', 'API erreichbar, Key wird akzeptiert.');
+        } catch (\Throwable $e) {
+            $msg = $e->getMessage();
+            if ($request->wantsJson()) {
+                return response()->json(['success' => false, 'message' => $msg]);
+            }
+
+            return redirect()->route('admin.settings.presseportal')->with('presseportal_test_error', $msg);
+        }
+    }
+
+    private function ensureAdminRole(): void
+    {
+        $user = Auth::user();
+        if (! $user || ! method_exists($user, 'hasRole') || ! $user->hasRole('admin')) {
+            abort(403, 'Nur Admin darf diese Einstellung bearbeiten.');
+        }
+    }
+
+    private function getPositiveDecimalSetting(string $key, float $default): float
+    {
+        $raw = SiteSetting::get($key);
+        if ($raw === null || $raw === '') {
+            return $default;
+        }
+
+        if (! is_numeric($raw)) {
+            return $default;
+        }
+
+        $value = (float) $raw;
+        if ($value < 0) {
+            return $default;
+        }
+
+        return round($value, 2);
     }
 }

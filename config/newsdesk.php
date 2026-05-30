@@ -16,6 +16,7 @@ return [
     */
     'iptc_credit' => env('IPTC_CREDIT', 'Erftkreis News'),
     'iptc_copyright' => env('IPTC_COPYRIGHT', '© Erftkreis News. Alle Rechte vorbehalten.'),
+    'iptc_source' => env('IPTC_SOURCE', 'Erftkreis News Redaktion'),
 
     /*
     | Doppelte Download-Events (gleicher Versand + gleiche Datei innerhalb weniger Sekunden)

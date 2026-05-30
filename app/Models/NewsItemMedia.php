@@ -2,10 +2,14 @@
 
 namespace App\Models;
 
+use App\Services\ImageExifDetailsReader;
+use App\Services\ImageMetadataReader;
 use App\Services\MediaStorage;
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class NewsItemMedia extends Model
 {
@@ -19,6 +23,8 @@ class NewsItemMedia extends Model
 
     protected $fillable = [
         'news_item_id',
+        'source_video_media_id',
+        'brand_id',
         'type',
         'path',
         'preview_path',
@@ -30,9 +36,20 @@ class NewsItemMedia extends Model
         'photographer',
         'media_keywords',
         'description',
+        'metadata_location',
+        'metadata_recorded_at',
+        'city',
+        'state',
+        'country',
+        'country_code',
+        'capture_time',
+        'credit',
+        'copyright',
+        'source',
         'sort_order',
         'is_visible',
         'versand',
+        'delivery_visible_for_organization_ids',
         'is_teaser',
         'is_unkentlich',
         'quality_status',
@@ -71,8 +88,11 @@ class NewsItemMedia extends Model
         'ai_finished_at' => 'datetime',
         'ai_suggested_at' => 'datetime',
         'ai_payload' => 'array',
+        'delivery_visible_for_organization_ids' => 'array',
         'redaction_boxes' => 'array',
         'redacted_at' => 'datetime',
+        'capture_time' => 'datetime',
+        'metadata_recorded_at' => 'date',
     ];
 
     protected static function booted(): void
@@ -132,6 +152,101 @@ class NewsItemMedia extends Model
     }
 
     /**
+     * Bild aus Video-Standbild-Extraktion (keine Presse-Qualitätsprüfung wie bei Upload-Fotos).
+     */
+    public function isVideoDerivedStillImage(): bool
+    {
+        if (! $this->isImage()) {
+            return false;
+        }
+
+        if (Schema::hasColumn($this->getTable(), 'source_video_media_id')
+            && filled($this->source_video_media_id)) {
+            return true;
+        }
+
+        // Legacy: ältere Standbilder nur über festen Caption-Text erkennbar.
+        return trim((string) ($this->caption ?? '')) === 'Standbild aus Video';
+    }
+
+    /**
+     * Sichtbarkeit im Medienpaket (E-Mail-Link) und für FTP-Ziel: leere Liste = alle Medienhäuser;
+     * sonst nur nach Bestätigung mit passender Organisation (nicht bei reiner Freitext-Bestätigung).
+     */
+    public function isVisibleInDeliveryPackage(Delivery $delivery): bool
+    {
+        if (! $this->versand) {
+            return false;
+        }
+
+        $ctx = $delivery->mediaDeliveryViewerContext();
+        $ids = $this->delivery_visible_for_organization_ids;
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+        if ($ids === []) {
+            return true;
+        }
+
+        if ($ctx['unconfirmed']) {
+            return false;
+        }
+
+        if ($ctx['self_reported_only']) {
+            return false;
+        }
+
+        $oid = $ctx['organization_id'];
+        if ($oid === null) {
+            return false;
+        }
+
+        return in_array((int) $oid, $ids, true);
+    }
+
+    /**
+     * Öffentliche Artikel-/Portal-Ansicht: Medien nur sichtbar, wenn keine B2B-/Medienhaus-Einschränkung gesetzt ist.
+     */
+    public function isVisibleOnPublicArticle(): bool
+    {
+        $ids = $this->delivery_visible_for_organization_ids;
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+        return $ids === [];
+    }
+
+    /**
+     * Für FTP/SFTP: Medium an Ziel ausliefern, wenn Ziel-Organisation passt oder Medium uneingeschränkt ist.
+     */
+    public function isVisibleForFtpDestination(?int $destinationOrganizationId): bool
+    {
+        if (! $this->versand) {
+            return false;
+        }
+
+        $ids = $this->delivery_visible_for_organization_ids;
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $ids = array_values(array_unique(array_filter(array_map('intval', $ids))));
+
+        if ($ids === []) {
+            return true;
+        }
+
+        if ($destinationOrganizationId === null) {
+            return true;
+        }
+
+        return in_array((int) $destinationOrganizationId, $ids, true);
+    }
+
+    /**
      * Relativer Speicherpfad für den echten Medienpaket-Download (signierte Delivery-URL).
      * Verbindlich die Originaldatei (Spalte path), niemals Preview/Thumb/Poster/redacted.
      * Fallback nur, wenn original_path existiert (Backup der Redaction-Pipeline) und path fehlt.
@@ -153,6 +268,38 @@ class NewsItemMedia extends Model
         }
 
         return null;
+    }
+
+    /**
+     * Relativer Pfad für den Bild-Editor: dieselbe Originaldatei wie beim Download/Versand.
+     * Kein preview_path, kein Thumb, keine redigierte Ableitung.
+     */
+    public function resolveEditorSourceRelativePath(): ?string
+    {
+        return $this->resolveDeliveryDownloadRelativePath();
+    }
+
+    /**
+     * URLs für den Bild-Editor: bevorzugt Presigned S3 (kein Server-Cache), Proxy als Fallback.
+     *
+     * @return array{cache_key: string, proxy: string|null, direct: string|null}
+     */
+    public function editorSourceConfig(): array
+    {
+        $cacheKey = 'editor-media-'.$this->id;
+        $path = $this->resolveEditorSourceRelativePath();
+        if ($path === null) {
+            return ['cache_key' => $cacheKey, 'proxy' => null, 'direct' => null];
+        }
+
+        $proxy = route('admin.images.editor-source', $this->id);
+        $direct = null;
+        if (config('media_storage.editor_use_presigned_source', true)) {
+            $ttl = max(5, (int) config('media_storage.editor_presigned_ttl_minutes', 30));
+            $direct = app(MediaStorage::class)->temporaryPlaybackUrlForPath($path, now()->addMinutes($ttl));
+        }
+
+        return ['cache_key' => $cacheKey, 'proxy' => $proxy, 'direct' => $direct];
     }
 
     /**
@@ -230,6 +377,42 @@ class NewsItemMedia extends Model
     public function getThumbUrlAttribute(): ?string
     {
         return $this->preview_url ?? ($this->path ? app(MediaStorage::class)->url($this->path) : null);
+    }
+
+    /**
+     * URL für Admin-Bild-Mediathek: nur Master/Original (JPEG/PNG), keine WebP-/Derived-Vorschau.
+     */
+    public function getLibraryImageUrlAttribute(): ?string
+    {
+        if (! $this->isImage()) {
+            return null;
+        }
+
+        $master = $this->resolveIptcMasterRelativePath();
+        if ($master !== null) {
+            return app(MediaStorage::class)->url($master);
+        }
+
+        $path = trim((string) ($this->path ?? ''));
+        if ($path !== '' && $path !== 'news-media/.pending' && ! $this->isDerivedAssetPath($path)) {
+            return app(MediaStorage::class)->url($path);
+        }
+
+        $originalPath = trim((string) ($this->original_path ?? ''));
+        if ($originalPath !== '' && ! $this->isDerivedAssetPath($originalPath)) {
+            return app(MediaStorage::class)->url($originalPath);
+        }
+
+        return null;
+    }
+
+    private function isDerivedAssetPath(string $path): bool
+    {
+        $normalized = strtolower(str_replace('\\', '/', $path));
+
+        return str_contains($normalized, '/derived/')
+            || str_contains($normalized, '/thumb/')
+            || str_ends_with($normalized, '.webp');
     }
 
     /**
@@ -458,5 +641,208 @@ class NewsItemMedia extends Model
             'ai_last_error' => $message,
             'ai_attempts' => ($this->ai_attempts ?? 0) + 1,
         ]);
+    }
+
+    /**
+     * Relativer Pfad zur Master-JPEG-Datei für IPTC-Lesen/Schreiben (Medienpaket, Admin).
+     */
+    public function resolveIptcMasterRelativePath(): ?string
+    {
+        if (! $this->isImage()) {
+            return null;
+        }
+
+        $candidates = array_values(array_filter([
+            trim((string) ($this->path ?? '')),
+            trim((string) ($this->original_path ?? '')),
+        ], fn (string $p) => $p !== '' && $p !== 'news-media/.pending'));
+
+        $storage = app(MediaStorage::class);
+        foreach ($candidates as $candidate) {
+            $ext = strtolower(pathinfo($candidate, PATHINFO_EXTENSION));
+            if (! in_array($ext, ['jpg', 'jpeg'], true)) {
+                continue;
+            }
+            if ($storage->exists($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public function readImageMetadataFromMasterFile(): ?array
+    {
+        $rel = $this->resolveIptcMasterRelativePath();
+        if ($rel === null) {
+            return null;
+        }
+
+        $storage = app(MediaStorage::class);
+        try {
+            $resolved = $storage->resolveReadableLocalPath($rel);
+            $fullPath = $resolved['path'] ?? null;
+            if (! is_string($fullPath) || ! is_file($fullPath)) {
+                $storage->cleanupResolvedPath($resolved);
+
+                return null;
+            }
+            $meta = ImageMetadataReader::read($fullPath);
+            $storage->cleanupResolvedPath($resolved);
+
+            return $meta;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    /**
+     * Technische EXIF-Zeilen für Admin-Anzeige (Kamera, Belichtung, …).
+     *
+     * @return list<array{label: string, value: string}>
+     */
+    public function readExifDetailsFromMasterFile(): array
+    {
+        $rel = $this->resolveIptcMasterRelativePath();
+        if ($rel === null) {
+            return [];
+        }
+
+        $storage = app(MediaStorage::class);
+        try {
+            $resolved = $storage->resolveReadableLocalPath($rel);
+            $fullPath = $resolved['path'] ?? null;
+            if (! is_string($fullPath) || ! is_file($fullPath)) {
+                $storage->cleanupResolvedPath($resolved);
+
+                return [];
+            }
+            $rows = ImageExifDetailsReader::read($fullPath);
+            $storage->cleanupResolvedPath($resolved);
+
+            return $rows;
+        } catch (\Throwable $e) {
+            report($e);
+
+            return [];
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $metadata
+     */
+    public function syncCaptureTimeFromMetadata(array $metadata): void
+    {
+        $carbon = ImageMetadataReader::captureTimeCarbonFromMetadata($metadata);
+        if ($carbon === null) {
+            return;
+        }
+
+        $update = [];
+        if (Schema::hasColumn($this->getTable(), 'capture_time')) {
+            $update['capture_time'] = $carbon;
+        }
+        if (Schema::hasColumn($this->getTable(), 'metadata_recorded_at')) {
+            $update['metadata_recorded_at'] = $carbon->toDateString();
+        }
+
+        if ($update !== []) {
+            $this->update($update);
+        }
+    }
+
+    public function resolveCaptureTimeCarbonFromMasterFile(): ?Carbon
+    {
+        $meta = $this->readImageMetadataFromMasterFile();
+
+        return $meta !== null
+            ? ImageMetadataReader::captureTimeCarbonFromMetadata($meta)
+            : null;
+    }
+
+    /**
+     * Setzt fehlende capture_time (EXIF, Quellvideo bei Stills, sonst Upload-Zeit).
+     */
+    public function backfillCaptureTimeIfMissing(): bool
+    {
+        if ($this->type !== 'image' || $this->capture_time !== null) {
+            return false;
+        }
+
+        $carbon = $this->resolveCaptureTimeCarbonFromMasterFile();
+
+        if ($carbon === null && Schema::hasColumn($this->getTable(), 'source_video_media_id')
+            && filled($this->source_video_media_id)) {
+            $video = self::query()->find($this->source_video_media_id);
+            $carbon = $video?->capture_time ?? $video?->created_at;
+        }
+
+        $carbon ??= $this->created_at;
+
+        if ($carbon === null) {
+            return false;
+        }
+
+        $update = ['capture_time' => $carbon];
+        if (Schema::hasColumn($this->getTable(), 'metadata_recorded_at')) {
+            $update['metadata_recorded_at'] = $carbon->toDateString();
+        }
+
+        $this->update($update);
+
+        return true;
+    }
+
+    /**
+     * IPTC/XMP-Felder für {@see \App\Services\ImageMetadataWriter::write()}.
+     *
+     * @return array<string, mixed>
+     */
+    public function resolvedIptcForEmbed(): array
+    {
+        $keywords = trim((string) ($this->media_keywords ?? ''));
+
+        return [
+            'image_title' => $this->image_title,
+            'headline' => $this->description,
+            'caption' => $this->caption,
+            'keywords' => $keywords !== '' ? $keywords : null,
+            'photographer' => $this->photographer,
+            'credit' => $this->credit,
+            'copyright' => $this->copyright,
+            'source' => $this->source,
+            'city' => $this->city,
+            'state' => $this->state,
+            'country' => $this->country,
+            'country_code' => $this->country_code,
+            'capture_time' => $this->capture_time,
+        ];
+    }
+
+    /** Kölnimage-Fotos werden nicht automatisch redigiert; Erftkreis-News-Bilder schon. */
+    public function shouldAutoRedact(): bool
+    {
+        if (! $this->isImage()) {
+            return false;
+        }
+
+        $newsItem = $this->relationLoaded('newsItem')
+            ? $this->newsItem
+            : $this->newsItem()->with('brand')->first();
+
+        if ($newsItem === null) {
+            return true;
+        }
+
+        $brand = $newsItem->relationLoaded('brand')
+            ? $newsItem->brand
+            : $newsItem->brand()->first();
+
+        return ($brand?->key ?? '') !== 'koelnimage';
     }
 }

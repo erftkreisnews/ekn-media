@@ -51,7 +51,7 @@
                             <tbody class="divide-y divide-gray-200">
                                 @forelse($organizations as $org)
                                     <tr
-                                        x-show="matches(`{{ Str::lower($org->name) }}`)"
+                                        x-show="matches(@js(Str::lower($org->name)))"
                                         class="align-middle"
                                     >
                                         <td class="px-4 py-3">
@@ -71,11 +71,13 @@
                                         <td class="px-4 py-3 text-right text-sm">
                                             <a href="{{ url('/admin/customers/' . $org->id) }}" class="text-[#092E48] hover:underline mr-2">Anzeigen</a>
                                             <a href="{{ url('/admin/customers/' . $org->id . '/edit') }}" class="text-gray-600 hover:underline mr-2">Bearbeiten</a>
-                                            <form action="{{ url('/admin/customers/' . $org->id) }}" method="POST" class="inline" onsubmit="return confirm('Organisation löschen?');">
-                                                @csrf
-                                                @method('DELETE')
-                                                <button type="submit" class="text-red-600 hover:underline">Löschen</button>
-                                            </form>
+                                            @can('admin.customers.delete')
+                                                <form action="{{ url('/admin/customers/' . $org->id) }}" method="POST" class="inline" onsubmit="return window.adminConfirmDelete(this)" data-delete-prompt="Organisation löschen? Geben Sie zur Bestätigung „ja“ ein.">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="text-red-600 hover:underline">Löschen</button>
+                                                </form>
+                                            @endcan
                                         </td>
                                     </tr>
                                 @empty
@@ -90,7 +92,7 @@
                     @forelse($organizations as $org)
                         <article
                             class="rounded-2xl border border-slate-200/80 bg-white shadow-sm px-4 py-3"
-                            x-show="matches(`{{ Str::lower($org->name) }}`)"
+                            x-show="matches(@js(Str::lower($org->name)))"
                         >
                             <div class="flex items-start justify-between gap-3">
                                 <div class="min-w-0">
@@ -118,13 +120,15 @@
                                 <a href="{{ url('/admin/customers/' . $org->id . '/edit') }}" class="inline-flex flex-1 sm:flex-none justify-center items-center px-3 py-2 text-xs font-medium rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50">
                                     Bearbeiten
                                 </a>
-                                <form action="{{ url('/admin/customers/' . $org->id) }}" method="POST" class="inline-flex flex-1 sm:flex-none justify-center mt-1 sm:mt-0" onsubmit="return confirm('Organisation löschen?');">
-                                    @csrf
-                                    @method('DELETE')
-                                    <button type="submit" class="inline-flex justify-center items-center px-3 py-2 w-full text-xs font-medium rounded-xl border border-red-600 text-red-700 hover:bg-red-50">
-                                        Löschen
-                                    </button>
-                                </form>
+                                @can('admin.customers.delete')
+                                    <form action="{{ url('/admin/customers/' . $org->id) }}" method="POST" class="inline-flex flex-1 sm:flex-none justify-center mt-1 sm:mt-0" onsubmit="return window.adminConfirmDelete(this)" data-delete-prompt="Organisation löschen? Geben Sie zur Bestätigung „ja“ ein.">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button type="submit" class="inline-flex justify-center items-center px-3 py-2 w-full text-xs font-medium rounded-xl border border-red-600 text-red-700 hover:bg-red-50">
+                                            Löschen
+                                        </button>
+                                    </form>
+                                @endcan
                             </div>
                         </article>
                     @empty

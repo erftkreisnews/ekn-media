@@ -17,8 +17,14 @@
         @endif
 
         <div class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
-            <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+            <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
                 <h2 class="text-sm font-semibold text-gray-900">Benutzer</h2>
+                <a
+                    href="{{ route('admin.backoffice.users.create') }}"
+                    class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858] shrink-0"
+                >
+                    Neuer Benutzer
+                </a>
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-gray-200">
@@ -46,7 +52,7 @@
                                         <div class="flex flex-wrap gap-1">
                                             @foreach($user->roles as $role)
                                                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
-                                                    {{ $role->name }}
+                                                    {{ config('admin_roles.role_labels.'.$role->name, $role->name) }}
                                                 </span>
                                             @endforeach
                                         </div>
@@ -57,8 +63,14 @@
                                         <a href="{{ route('admin.backoffice.users.edit', $user) }}" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-[#092E48] text-[#092E48] hover:bg-[#092E48]/5">
                                             Bearbeiten
                                         </a>
+                                        <form method="POST" action="{{ route('admin.backoffice.users.welcome-mail', $user) }}">
+                                            @csrf
+                                            <button type="submit" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border-2 border-emerald-700 text-emerald-800 hover:bg-emerald-100">
+                                                Willkommens-Mail
+                                            </button>
+                                        </form>
                                         @if(auth()->id() !== $user->id)
-                                            <form method="POST" action="{{ route('admin.backoffice.users.destroy', $user) }}" onsubmit="return confirm('Benutzer „{{ $user->name }}“ wirklich löschen? Dies kann nicht rückgängig gemacht werden.');">
+                                            <form method="POST" action="{{ route('admin.backoffice.users.destroy', $user) }}" onsubmit="return window.adminConfirmDelete(this)" data-delete-prompt="Benutzer „{{ $user->name }}“ wirklich löschen? Dies kann nicht rückgängig gemacht werden. Geben Sie zur Bestätigung „ja“ ein.">
                                                 @csrf
                                                 @method('DELETE')
                                                 <button type="submit" class="inline-flex items-center px-3 py-1.5 text-xs font-medium rounded-md border border-red-600 text-red-700 hover:bg-red-50">

@@ -34,4 +34,22 @@ return [
     |
     */
     'prefer_presigned_streaming' => env('MEDIA_PREFER_PRESIGNED_STREAMING', true),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Bild-Editor: Original direkt von S3 (Presigned URL)
+    |--------------------------------------------------------------------------
+    |
+    | true: Browser lädt das Original direkt vom Object Storage (schnell, kein
+    | Kopieren auf den App-Server). Fallback bleibt die Same-Origin-Proxy-Route.
+    | Voraussetzung: S3-CORS für die Admin-Domain (GET/HEAD), z. B.:
+    |   AllowedOrigins: https://erftkreis-news.media
+    |   AllowedMethods: GET, HEAD
+    |   AllowedHeaders: *
+    |
+    */
+    'editor_use_presigned_source' => env('MEDIA_EDITOR_USE_PRESIGNED_SOURCE', env('MEDIA_PREFER_PRESIGNED_STREAMING', true)),
+
+    /** Gültigkeit der Presigned-URL für den Editor (Minuten). */
+    'editor_presigned_ttl_minutes' => (int) env('MEDIA_EDITOR_PRESIGNED_TTL_MINUTES', 30),
 ];

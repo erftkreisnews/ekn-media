@@ -14,6 +14,17 @@ return [
             'report' => false,
         ],
 
+        /*
+         * Fallback für Programm-PDFs, die noch unter storage/app/… liegen (früher „local“ = app,
+         * nicht app/private). Nur für Pfade planned-event-schedules/… verwendet.
+         */
+        'planned_schedule_legacy' => [
+            'driver' => 'local',
+            'root' => storage_path('app'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),

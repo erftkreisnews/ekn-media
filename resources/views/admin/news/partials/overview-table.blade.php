@@ -47,12 +47,12 @@
                         <td class="px-3 py-2 text-sm whitespace-nowrap align-middle">
                             @php $teaserImage = $newsItem->teaser_image; @endphp
                             @if($teaserImage)
-                                <img src="{{ $teaserImage->thumb_url ?: ($teaserImage->preview_url ?: $teaserImage->url) }}" alt="" class="h-12 w-16 object-cover rounded border border-gray-200">
+                                <img src="{{ $teaserImage->thumb_url ?: ($teaserImage->preview_url ?: $teaserImage->url) }}" alt="{{ $newsItem->title ?: ($newsItem->subheadline ?: 'Bildmaterial von Erftkreis News Media') }}" class="h-12 w-16 object-cover rounded border border-gray-200">
                             @else
                                 <span class="inline-flex h-12 w-16 items-center justify-center rounded border border-gray-200 bg-gray-50 text-gray-400 text-xs" title="Teaserbild (noch nicht hinterlegt)">–</span>
                             @endif
                         </td>
-                        <td class="px-3 py-3 text-sm text-gray-600 whitespace-nowrap font-mono">{{ $newsItem->id }}</td>
+                        <td class="px-3 py-3 text-sm text-gray-600 whitespace-nowrap font-mono">{{ $newsItem->display_news_id }}</td>
                         <td class="px-3 py-3 text-sm text-gray-900">
                             <div class="font-medium max-w-[220px] truncate" title="{{ $newsItem->title }}">{{ $newsItem->title }}</div>
                         </td>
@@ -71,7 +71,8 @@
                                 action="{{ route('admin.news.destroy', $newsItem) }}"
                                 method="POST"
                                 class="inline-block ml-1"
-                                onsubmit="return confirm('Diese Nachricht wirklich löschen?');"
+                                onsubmit="return window.adminConfirmDelete(this)"
+                                data-delete-prompt="Diese Nachricht wirklich löschen? Geben Sie zur Bestätigung „ja“ ein."
                             >
                                 @csrf
                                 @method('DELETE')
@@ -118,7 +119,7 @@
                             <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {{ $badgeClasses }}">
                                 {{ $statusLabels[$status] ?? ucfirst($status) }}
                             </span>
-                            <span class="text-xs text-gray-500 font-mono">ID {{ $newsItem->id }}</span>
+                            <span class="text-xs text-gray-500 font-mono">ID {{ $newsItem->display_news_id }}</span>
                         </div>
                         <p class="font-medium text-gray-900 truncate mt-1">{{ $newsItem->title }}</p>
                         <p class="text-sm text-gray-500 mt-0.5">{{ optional($newsItem->author)->name ?? '–' }} · {{ optional($newsItem->updated_at)->format('d.m.Y H:i') }}</p>
@@ -131,7 +132,7 @@
                         >
                             Bearbeiten
                         </a>
-                        <form action="{{ route('admin.news.destroy', $newsItem) }}" method="POST" onsubmit="return confirm('Diese Nachricht wirklich löschen?');">
+                        <form action="{{ route('admin.news.destroy', $newsItem) }}" method="POST" onsubmit="return window.adminConfirmDelete(this)" data-delete-prompt="Diese Nachricht wirklich löschen? Geben Sie zur Bestätigung „ja“ ein.">
                             @csrf
                             @method('DELETE')
                             <button
@@ -155,7 +156,7 @@
     </div>
 
     @if ($newsItems->hasPages())
-        <div class="px-4 py-3 border-t border-gray-200">
+        <div class="px-3 sm:px-6 py-3 border-t border-gray-200 overflow-x-auto">
             {{ $newsItems->links() }}
         </div>
     @endif

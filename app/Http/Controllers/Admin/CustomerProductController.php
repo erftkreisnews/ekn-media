@@ -7,6 +7,7 @@ use App\Jobs\SyncProductToLexwareJob;
 use App\Models\Organization;
 use App\Models\Product;
 use App\Services\Lexware\LexwareContactService;
+use App\Support\AdminPermissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -15,7 +16,7 @@ class CustomerProductController extends Controller
 {
     public function index(Organization $customer): View
     {
-        $products = $customer->products()->withCount('deliveryDestinations')->orderBy('name')->get();
+        $products = $customer->products()->with('organization')->withCount('deliveryDestinations')->orderBy('name')->get();
 
         return view('admin.customers.products.index', compact('customer', 'products'));
     }
@@ -27,7 +28,7 @@ class CustomerProductController extends Controller
 
     public function store(Request $request, Organization $customer): RedirectResponse
     {
-        $validated = $this->validateProduct($request);
+        $validated = $this->validateProduct($request, null);
         $validated['organization_id'] = $customer->id;
         $validated['active'] = $request->boolean('active', true);
         $product = Product::create($validated);
@@ -52,7 +53,7 @@ class CustomerProductController extends Controller
         if ($product->organization_id !== $customer->id) {
             abort(404);
         }
-        $validated = $this->validateProduct($request);
+        $validated = $this->validateProduct($request, $product);
         $validated['active'] = $request->boolean('active', true);
         $product->update($validated);
         if (config('lexware.api_key')) {
@@ -63,10 +64,13 @@ class CustomerProductController extends Controller
     }
 
     public function importFromLexware(
+        Request $request,
         Organization $customer,
         Product $product,
         LexwareContactService $lexwareContactService
     ): RedirectResponse {
+        abort_unless($request->user()->can(AdminPermissions::CUSTOMERS_BILLING_SENSITIVE), 403);
+
         if ($product->organization_id !== $customer->id) {
             abort(404);
         }
@@ -104,24 +108,14 @@ class CustomerProductController extends Controller
         return redirect()->route('admin.customers.products.index', $customer)->with('status', 'Abteilung / Redaktion wurde gelöscht.');
     }
 
-    private function validateProduct(Request $request): array
+    private function validateProduct(Request $request, ?Product $existing): array
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'active' => ['boolean'],
-            'buyer_reference' => ['nullable', 'string', 'max:255'],
-            'billing_name' => ['nullable', 'string', 'max:255'],
-            'billing_company' => ['nullable', 'string', 'max:255'],
-            'billing_street' => ['nullable', 'string', 'max:255'],
-            'billing_postal_code' => ['nullable', 'string', 'max:20'],
-            'billing_city' => ['nullable', 'string', 'max:255'],
-            'billing_country' => ['nullable', 'string', 'max:100'],
-            'billing_email_primary' => ['nullable', 'email'],
-            'billing_email_secondary' => ['nullable', 'email'],
-            'billing_notes' => ['nullable', 'string', 'max:5000'],
         ]);
 
-        foreach ([
+        $billingFields = [
             'buyer_reference',
             'billing_name',
             'billing_company',
@@ -132,8 +126,32 @@ class CustomerProductController extends Controller
             'billing_email_primary',
             'billing_email_secondary',
             'billing_notes',
-        ] as $field) {
-            $validated[$field] = $request->filled($field) ? trim((string) $request->input($field)) : null;
+        ];
+
+        if ($request->user()->can(AdminPermissions::CUSTOMERS_BILLING_SENSITIVE)) {
+            $request->validate([
+                'buyer_reference' => ['nullable', 'string', 'max:255'],
+                'billing_name' => ['nullable', 'string', 'max:255'],
+                'billing_company' => ['nullable', 'string', 'max:255'],
+                'billing_street' => ['nullable', 'string', 'max:255'],
+                'billing_postal_code' => ['nullable', 'string', 'max:20'],
+                'billing_city' => ['nullable', 'string', 'max:255'],
+                'billing_country' => ['nullable', 'string', 'max:100'],
+                'billing_email_primary' => ['nullable', 'email'],
+                'billing_email_secondary' => ['nullable', 'email'],
+                'billing_notes' => ['nullable', 'string', 'max:5000'],
+            ]);
+            foreach ($billingFields as $field) {
+                $validated[$field] = $request->filled($field) ? trim((string) $request->input($field)) : null;
+            }
+        } elseif ($existing) {
+            foreach ($billingFields as $field) {
+                $validated[$field] = $existing->{$field};
+            }
+        } else {
+            foreach ($billingFields as $field) {
+                $validated[$field] = null;
+            }
         }
 
         return $validated;

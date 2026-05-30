@@ -26,7 +26,11 @@
             <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex items-start justify-between">
                 <div>
                     <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Medienhaus</p>
-                    <p class="mt-2 text-sm text-gray-700">Lexware- und Rechnungsdaten werden auf den untergeordneten Abteilungen/Redaktionen gepflegt. Versandkennungen bleiben auf Medienhaus-Ebene.</p>
+                    @can('admin.customers.billing_sensitive')
+                        <p class="mt-2 text-sm text-gray-700">Lexware- und Rechnungsdaten werden auf den untergeordneten Abteilungen/Redaktionen gepflegt. Versandkennungen bleiben auf Medienhaus-Ebene.</p>
+                    @else
+                        <p class="mt-2 text-sm text-gray-700">Stammdaten und Versand pro Redaktion; PV-, Kunden- und Autorenkennzeichen sieht nur die Buchhaltung.</p>
+                    @endcan
                 </div>
             </div>
         </div>
@@ -54,19 +58,23 @@
                             <div class="min-w-0">
                                 <span class="font-medium text-gray-900">{{ $p->name }}</span>
                                 <span class="text-sm text-gray-500 ml-2">{{ $p->delivery_destinations_count ?? 0 }} Versandziele</span>
+                                @can('admin.customers.billing_sensitive')
                                 <div class="mt-1 text-sm text-gray-600 space-y-0.5">
-                                    <p>Buyer Reference: {{ $p->buyer_reference ?: '–' }}</p>
+                                    <p>Buyer Reference: {{ $p->resolvedBuyerReference() ?: '–' }}</p>
                                     <p>Lexware Kontakt-ID: {{ $p->lexware_contact_id ?: '–' }}</p>
                                     <p>Rechnungsadresse: {{ $p->billing_address_single_line ?: '–' }}</p>
                                     @if($p->billing_email_primary || $p->billing_email_secondary)
                                         <p>E-Mail: {{ $p->billing_email_primary ?: '–' }}@if($p->billing_email_secondary), {{ $p->billing_email_secondary }}@endif</p>
                                     @endif
                                 </div>
+                                @endcan
                             </div>
                             <div class="flex gap-2">
                                 <a href="{{ route('admin.destinations.index', $p) }}" class="text-sm text-[#092E48] hover:underline">Versandziele</a>
                                 <a href="{{ url('/admin/customers/' . $customer->id . '/products/' . $p->id . '/edit') }}" class="text-sm text-gray-600 hover:underline">Bearbeiten</a>
-                                <form action="{{ url('/admin/customers/' . $customer->id . '/products/' . $p->id) }}" method="POST" class="inline" onsubmit="return confirm('Redaktion löschen?');">@csrf @method('DELETE')<button type="submit" class="text-sm text-red-600 hover:underline">Löschen</button></form>
+                                @can('admin.customers.delete')
+                                    <form action="{{ url('/admin/customers/' . $customer->id . '/products/' . $p->id) }}" method="POST" class="inline" onsubmit="return window.adminConfirmDelete(this)" data-delete-prompt="Redaktion löschen? Geben Sie zur Bestätigung „ja“ ein.">@csrf @method('DELETE')<button type="submit" class="text-sm text-red-600 hover:underline">Löschen</button></form>
+                                @endcan
                             </div>
                         </li>
                         @endforeach
@@ -120,7 +128,9 @@
                             </div>
                             <div class="flex gap-2">
                                 <a href="{{ url('/admin/destinations/' . $d->id . '/edit') }}" class="text-sm text-[#092E48] hover:underline">Bearbeiten</a>
-                                <form action="{{ url('/admin/destinations/' . $d->id) }}" method="POST" class="inline" onsubmit="return confirm('Versandziel löschen?');">@csrf @method('DELETE')<button type="submit" class="text-sm text-red-600 hover:underline">Löschen</button></form>
+                                @can('admin.customers.delete')
+                                    <form action="{{ url('/admin/destinations/' . $d->id) }}" method="POST" class="inline" onsubmit="return window.adminConfirmDelete(this)" data-delete-prompt="Versandziel löschen? Geben Sie zur Bestätigung „ja“ ein.">@csrf @method('DELETE')<button type="submit" class="text-sm text-red-600 hover:underline">Löschen</button></form>
+                                @endcan
                             </div>
                         </li>
                         @endforeach

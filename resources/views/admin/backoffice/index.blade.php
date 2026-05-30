@@ -28,6 +28,31 @@
                     </a>
                 </div>
             </div>
+            @if(auth()->user()?->hasRole('admin') && auth()->user()?->can('admin.customers'))
+            <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Medienhäuser</h2>
+                <p class="mt-2 text-gray-900 font-semibold">
+                    Kundenverwaltung
+                </p>
+                <p class="mt-1 text-sm text-gray-600">
+                    Medienhäuser, Redaktionen, Kontakte und Versandziele (E-Mail/FTP) pflegen.
+                </p>
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <a
+                        href="{{ route('admin.customers.index') }}"
+                        class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]"
+                    >
+                        Medienhäuser öffnen
+                    </a>
+                    <a
+                        href="{{ route('admin.customers.create') }}"
+                        class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                    >
+                        Neues Medienhaus
+                    </a>
+                </div>
+            </div>
+            @endif
             <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
                 <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Abrechnung (geplant)</h2>
                 <p class="mt-2 text-gray-900 font-semibold">
@@ -45,6 +70,16 @@
                     </a>
                 </div>
             </div>
+            <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Fundstellen (VÖ &amp; Recht)</h2>
+                <p class="mt-2 text-gray-900 font-semibold">Bild-Fundstellen im Web dokumentieren</p>
+                <p class="mt-1 text-sm text-gray-600">Nach Google Lens / News: URLs erfassen. Kunden-Web-Domains für Lizenz-Erkennung unter Medienhaus bearbeiten.</p>
+                <div class="mt-4 flex flex-wrap gap-2">
+                    <a href="{{ route('admin.backoffice.publication-findings.index') }}" class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]">Fundstellen öffnen</a>
+                    <a href="{{ route('admin.backoffice.publication-findings.create') }}" class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">Neu erfassen</a>
+                </div>
+            </div>
+            
             <div class="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
                 <h2 class="text-sm font-medium text-gray-500 uppercase tracking-wide">Nutzung &amp; Versand‑Auswertungen</h2>
                 <p class="mt-2 text-gray-900 font-semibold">

@@ -68,6 +68,16 @@ class MediaStorage
         return (string) config('media_storage.fallback_disk', 'public');
     }
 
+    public function ingestPreviewDiskName(): string
+    {
+        return (string) config('ingest.preview.disk', 'public');
+    }
+
+    public function ingestPreviewDisk(): Filesystem
+    {
+        return Storage::disk($this->ingestPreviewDiskName());
+    }
+
     public function activeDisk(): Filesystem
     {
         return Storage::disk($this->activeDiskName());
@@ -85,11 +95,26 @@ class MediaStorage
 
     public function exists(string $path): bool
     {
+        if (str_starts_with($path, 'ingest-previews/')) {
+            if ($this->diskExists($this->ingestPreviewDiskName(), $path)) {
+                return true;
+            }
+        }
+
         $activeDiskName = $this->activeDiskName();
         $fallbackDiskName = $this->fallbackDiskName();
 
         if (! isset($this->existsCache[$activeDiskName][$path])) {
-            $this->existsCache[$activeDiskName][$path] = $this->activeDisk()->exists($path);
+            try {
+                $this->existsCache[$activeDiskName][$path] = $this->activeDisk()->exists($path);
+            } catch (\Throwable $e) {
+                Log::warning('MediaStorage.exists.active_failed', [
+                    'disk' => $activeDiskName,
+                    'path' => $path,
+                    'error' => $e->getMessage(),
+                ]);
+                $this->existsCache[$activeDiskName][$path] = false;
+            }
         }
 
         if ($this->existsCache[$activeDiskName][$path] === true) {
@@ -101,7 +126,16 @@ class MediaStorage
         }
 
         if (! isset($this->existsCache[$fallbackDiskName][$path])) {
-            $this->existsCache[$fallbackDiskName][$path] = $this->fallbackDisk()->exists($path);
+            try {
+                $this->existsCache[$fallbackDiskName][$path] = $this->fallbackDisk()->exists($path);
+            } catch (\Throwable $e) {
+                Log::warning('MediaStorage.exists.fallback_failed', [
+                    'disk' => $fallbackDiskName,
+                    'path' => $path,
+                    'error' => $e->getMessage(),
+                ]);
+                $this->existsCache[$fallbackDiskName][$path] = false;
+            }
         }
 
         return $this->existsCache[$fallbackDiskName][$path] === true;
@@ -266,46 +300,127 @@ class MediaStorage
             $deleted = $this->fallbackDisk()->delete($path) || $deleted;
         }
 
+        $previewDisk = $this->ingestPreviewDiskName();
+        if (str_starts_with($path, 'ingest-previews/')
+            && $previewDisk !== $this->activeDiskName()
+            && $previewDisk !== $this->fallbackDiskName()
+            && $this->ingestPreviewDisk()->exists($path)) {
+            $deleted = $this->ingestPreviewDisk()->delete($path) || $deleted;
+        }
+
         return $deleted;
+    }
+
+    public function resolveReadableLocalPath(string $path): ?array
+    {
+        foreach ($this->readableLocalPathDisksFor($path) as $diskName) {
+            $resolved = $this->resolveReadableLocalPathOnDisk($path, $diskName);
+            if ($resolved !== null) {
+                return $resolved;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function readableLocalPathDisksFor(string $path): array
+    {
+        if (str_starts_with($path, 'ingest-previews/')) {
+            $previewDisk = $this->ingestPreviewDiskName();
+            $activeDisk = $this->activeDiskName();
+            $fallbackDisk = $this->fallbackDiskName();
+
+            return array_values(array_unique(array_filter([
+                $previewDisk,
+                $activeDisk,
+                $fallbackDisk !== $activeDisk ? $fallbackDisk : null,
+            ])));
+        }
+
+        $activeDisk = $this->activeDiskName();
+        $fallbackDisk = $this->fallbackDiskName();
+
+        return array_values(array_unique(array_filter([
+            $activeDisk,
+            $fallbackDisk !== $activeDisk ? $fallbackDisk : null,
+        ])));
     }
 
     /**
      * @return array{path:string,temporary:bool,disk:string}|null
      */
-    public function resolveReadableLocalPath(string $path): ?array
+    private function resolveReadableLocalPathOnDisk(string $path, string $diskName): ?array
     {
-        $activeDiskName = $this->activeDiskName();
-        $activeDisk = $this->activeDisk();
-        if ($activeDisk->exists($path)) {
-            if ($this->isLocalDisk($activeDiskName)) {
-                return ['path' => $activeDisk->path($path), 'temporary' => false, 'disk' => $activeDiskName];
-            }
-
-            $tempPath = $this->copyDiskFileToTemp($activeDisk, $path);
-            if ($tempPath !== null) {
-                return ['path' => $tempPath, 'temporary' => true, 'disk' => $activeDiskName];
-            }
-        }
-
-        $fallbackDiskName = $this->fallbackDiskName();
-        if ($fallbackDiskName === $activeDiskName) {
+        if (! $this->diskExists($diskName, $path)) {
             return null;
         }
 
-        $fallbackDisk = $this->fallbackDisk();
-        if (! $fallbackDisk->exists($path)) {
-            return null;
+        $disk = Storage::disk($diskName);
+        if ($this->isLocalDisk($diskName)) {
+            return ['path' => $disk->path($path), 'temporary' => false, 'disk' => $diskName];
         }
 
-        if ($this->isLocalDisk($fallbackDiskName)) {
-            return ['path' => $fallbackDisk->path($path), 'temporary' => false, 'disk' => $fallbackDiskName];
-        }
-
-        $tempPath = $this->copyDiskFileToTemp($fallbackDisk, $path);
+        $tempPath = $this->copyDiskFileToTemp($disk, $path);
 
         return $tempPath !== null
-            ? ['path' => $tempPath, 'temporary' => true, 'disk' => $fallbackDiskName]
+            ? ['path' => $tempPath, 'temporary' => true, 'disk' => $diskName]
             : null;
+    }
+
+    private function diskExists(string $diskName, string $path): bool
+    {
+        if ($diskName === $this->activeDiskName()) {
+            return $this->exists($path);
+        }
+
+        if ($diskName === $this->fallbackDiskName() && $this->fallbackDiskName() !== $this->activeDiskName()) {
+            if (! isset($this->existsCache[$diskName][$path])) {
+                try {
+                    $this->existsCache[$diskName][$path] = $this->fallbackDisk()->exists($path);
+                } catch (\Throwable $e) {
+                    Log::warning('MediaStorage.exists.fallback_failed', [
+                        'disk' => $diskName,
+                        'path' => $path,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $this->existsCache[$diskName][$path] = false;
+                }
+            }
+
+            return $this->existsCache[$diskName][$path] === true;
+        }
+
+        if ($diskName === $this->ingestPreviewDiskName()) {
+            if (! isset($this->existsCache[$diskName][$path])) {
+                try {
+                    $this->existsCache[$diskName][$path] = $this->ingestPreviewDisk()->exists($path);
+                } catch (\Throwable $e) {
+                    Log::warning('MediaStorage.exists.preview_disk_failed', [
+                        'disk' => $diskName,
+                        'path' => $path,
+                        'error' => $e->getMessage(),
+                    ]);
+                    $this->existsCache[$diskName][$path] = false;
+                }
+            }
+
+            return $this->existsCache[$diskName][$path] === true;
+        }
+
+        try {
+            return Storage::disk($diskName)->exists($path);
+        } catch (\Throwable $e) {
+            Log::warning('MediaStorage.exists.disk_failed', [
+                'disk' => $diskName,
+                'path' => $path,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
     }
 
     public function cleanupResolvedPath(?array $resolved): void
@@ -317,19 +432,49 @@ class MediaStorage
         @unlink((string) $resolved['path']);
     }
 
-    public function putFromLocalFile(string $targetPath, string $localPath, array $options = []): bool
+    public function putFromLocalFile(string $targetPath, string $localPath, array $options = [], ?string $diskName = null): bool
     {
         if (! is_file($localPath) || ! is_readable($localPath)) {
+            Log::warning('MediaStorage.putFromLocalFile.unreadable', [
+                'target_path' => $targetPath,
+                'local_path' => $localPath,
+            ]);
+
             return false;
         }
 
+        $disk = $diskName !== null ? Storage::disk($diskName) : $this->activeDisk();
         $stream = @fopen($localPath, 'rb');
         if ($stream === false) {
+            Log::warning('MediaStorage.putFromLocalFile.fopen_failed', [
+                'target_path' => $targetPath,
+                'local_path' => $localPath,
+            ]);
+
             return false;
         }
 
         try {
-            return (bool) $this->activeDisk()->put($targetPath, $stream, $options);
+            $ok = (bool) $disk->put($targetPath, $stream, $options);
+            if ($ok) {
+                return true;
+            }
+
+            Log::warning('MediaStorage.putFromLocalFile.put_failed', [
+                'disk' => $diskName ?? $this->activeDiskName(),
+                'target_path' => $targetPath,
+                'local_size' => filesize($localPath),
+            ]);
+
+            return (bool) $disk->put($targetPath, (string) file_get_contents($localPath), $options);
+        } catch (\Throwable $e) {
+            Log::error('MediaStorage.putFromLocalFile.exception', [
+                'disk' => $diskName ?? $this->activeDiskName(),
+                'target_path' => $targetPath,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
         } finally {
             fclose($stream);
         }

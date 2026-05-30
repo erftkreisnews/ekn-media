@@ -4,6 +4,49 @@
 
 [x-cloak] { display: none !important; }
 
+/* Koelnimage CI: Rot/Weiss als Grundfarben */
+.koelnimage-theme {
+    --koelnimage-red: #b91c1c;
+    --koelnimage-red-dark: #991b1b;
+    --koelnimage-red-soft: #7f1d1d;
+    background-color: #ffffff;
+}
+
+.koelnimage-theme h1,
+.koelnimage-theme h2,
+.koelnimage-theme h3,
+.koelnimage-theme h4,
+.koelnimage-theme h5,
+.koelnimage-theme h6 {
+    color: var(--koelnimage-red-dark) !important;
+}
+
+.koelnimage-theme .text-gray-900,
+.koelnimage-theme .text-zinc-900 {
+    color: var(--koelnimage-red-dark) !important;
+}
+
+.koelnimage-theme .text-gray-700,
+.koelnimage-theme .text-zinc-700 {
+    color: var(--koelnimage-red-soft);
+}
+
+.koelnimage-theme .bg-gray-900 {
+    background-color: var(--koelnimage-red) !important;
+}
+
+.koelnimage-theme .hover\:bg-gray-800:hover {
+    background-color: var(--koelnimage-red-dark) !important;
+}
+
+.koelnimage-theme .border-gray-900 {
+    border-color: var(--koelnimage-red) !important;
+}
+
+.koelnimage-theme a:hover {
+    color: var(--koelnimage-red-dark);
+}
+
 /* Artikel-Body: Bilder und eingebettete Medien vollständig sichtbar */
 .article-body img {
     max-width: 100%;
@@ -13,4 +56,1024 @@
 .article-body figure,
 .article-body p {
     max-width: 100%;
+}
+
+/* Kölnimage Artikel: Lesbarkeit ohne @tailwindcss/typography; dunkle Schrift erzwingen (schützt vor Copy/Paste mit heller Farbe auf weißem Kartengrund) */
+.koelnimage-article-body {
+    @apply max-w-prose text-pretty text-zinc-800;
+    color: rgb(39 39 42);
+}
+.koelnimage-article-body > p,
+.koelnimage-article-body p {
+    @apply mb-5 text-[1.0625rem] leading-[1.75] [overflow-wrap:anywhere] last:mb-0 text-zinc-800;
+}
+.koelnimage-article-body > p:last-child {
+    @apply mb-0;
+}
+.koelnimage-article-body h2,
+.koelnimage-article-body h3 {
+    @apply mt-8 font-semibold text-zinc-900 first:mt-0;
+}
+.koelnimage-article-body h2 {
+    @apply text-xl;
+}
+.koelnimage-article-body h3 {
+    @apply text-lg;
+}
+.koelnimage-article-body a {
+    @apply font-medium text-red-800 underline decoration-red-800/30 underline-offset-2 hover:text-red-900 hover:decoration-red-900/50;
+}
+.koelnimage-article-body ul {
+    @apply mb-5 list-disc space-y-2 pl-6 text-[1.0625rem] leading-relaxed;
+}
+.koelnimage-article-body ol {
+    @apply mb-5 list-decimal space-y-2 pl-6 text-[1.0625rem] leading-relaxed;
+}
+.koelnimage-article-body blockquote {
+    @apply border-l-4 border-zinc-300 pl-4 text-zinc-700 italic;
+}
+
+/* Kölnimage Galerie: DOM/Klassen wie SpeedShot-Hub (siehe global.css .galerie-grid / .gallery-card), scoped */
+.koelnimage-hub-gallery .galerie-grid.layout-gallery {
+    @apply grid w-full max-w-full gap-3 sm:gap-4;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 640px) {
+    .koelnimage-hub-gallery .galerie-grid.layout-gallery {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+@media (min-width: 768px) {
+    .koelnimage-hub-gallery .galerie-grid.layout-gallery {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+@media (min-width: 1024px) {
+    .koelnimage-hub-gallery .galerie-grid.layout-gallery {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+}
+
+.koelnimage-hub-gallery .gallery-card {
+    @apply flex cursor-pointer flex-col overflow-hidden rounded-[4px] border border-zinc-200 bg-white text-left shadow-sm transition duration-200;
+    outline: none;
+}
+.koelnimage-hub-gallery .gallery-card:hover {
+    @apply -translate-y-0.5 shadow-md;
+}
+.koelnimage-hub-gallery .gallery-card:focus-visible {
+    @apply ring-2 ring-red-600 ring-offset-2;
+}
+
+.koelnimage-hub-gallery .gallery-card-image-container {
+    @apply relative w-full overflow-hidden bg-zinc-100;
+}
+
+.koelnimage-hub-gallery .gallery-card-aspect {
+    @apply aspect-square w-full overflow-hidden;
+}
+
+.koelnimage-hub-gallery .gallery-card-image {
+    @apply h-full w-full object-cover transition duration-300;
+}
+
+.koelnimage-hub-gallery .gallery-card:hover .gallery-card-image {
+    @apply scale-[1.05];
+}
+
+.koelnimage-hub-gallery .gallery-card-id-badge {
+    @apply absolute left-1.5 top-1.5 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-semibold text-white;
+}
+
+.koelnimage-hub-gallery .gallery-card-hover {
+    @apply pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/45 opacity-0 transition-opacity duration-200;
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 500;
+}
+
+.koelnimage-hub-gallery .gallery-card:hover .gallery-card-hover {
+    @apply opacity-100;
+}
+
+/* Touch: Overlay leicht sichtbar, kein Hover nötig */
+@media (hover: none) {
+    .koelnimage-hub-gallery .gallery-card .gallery-card-hover {
+        @apply opacity-70;
+    }
+}
+
+.koelnimage-hub-gallery .gallery-card-content {
+    @apply flex min-h-[5.5rem] flex-col gap-1 border-t border-zinc-100 px-2.5 py-2;
+}
+
+.koelnimage-hub-gallery .gallery-card-title {
+    @apply line-clamp-2 text-[12px] font-semibold leading-snug text-zinc-900;
+}
+
+.koelnimage-hub-gallery .gallery-card-meta {
+    @apply truncate text-[10px] leading-tight text-zinc-500;
+}
+
+.koelnimage-hub-gallery .gallery-card-actions {
+    @apply mt-auto flex items-center gap-1.5 pt-1.5;
+}
+
+.koelnimage-hub-gallery .gallery-action-btn {
+    @apply inline-flex h-6 w-6 items-center justify-center rounded border border-zinc-200 bg-white text-zinc-600 transition hover:border-zinc-300 hover:bg-zinc-50 hover:text-zinc-800;
+}
+
+.koelnimage-hub-gallery .gallery-action-btn svg {
+    width: 14px;
+    height: 14px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+.koelnimage-hub-gallery-v2 .gallery-action-btn.is-active-favorite {
+    @apply border-red-300 bg-red-50 text-red-700;
+}
+
+.koelnimage-hub-gallery-v2 .gallery-action-btn.is-active-favorite svg {
+    fill: currentColor;
+}
+
+.koelnimage-hub-gallery-v2 .gallery-action-btn.is-active-cart {
+    @apply border-amber-300 bg-amber-50 text-amber-800;
+}
+
+.koelnimage-hub-gallery .galerie-grid.is-masonry {
+    @apply block columns-2 gap-3 sm:columns-3 lg:columns-4;
+}
+
+.koelnimage-hub-gallery .galerie-grid.is-masonry .gallery-card {
+    @apply mb-3 break-inside-avoid;
+}
+
+.koelnimage-hub-gallery .galerie-grid.is-fullscreen {
+    @apply grid grid-cols-1 gap-4 sm:grid-cols-2;
+}
+
+.koelnimage-hub-gallery .galerie-grid.is-fullscreen .gallery-card-aspect-wide {
+    @apply aspect-[16/10];
+}
+
+.koelnimage-hub-gallery .koelnimage-detail-image-frame > img.lightbox-main-image {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 100%;
+    max-height: min(68vh, 680px);
+    object-fit: contain;
+    object-position: center;
+}
+
+.koelnimage-photo-grid {
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+    .koelnimage-photo-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 768px) {
+    .koelnimage-photo-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+@media (min-width: 1024px) {
+    .koelnimage-photo-grid {
+        grid-template-columns: repeat(var(--koelnimage-desktop-cols, 4), minmax(0, 1fr));
+    }
+}
+
+.koelnimage-detail-dialog {
+    width: min(96vw, 1400px);
+    height: min(90vh, 700px);
+}
+
+.koelnimage-detail-media-col {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 24px;
+    background: transparent;
+    width: 100%;
+    min-width: 0;
+}
+
+.koelnimage-detail-image-frame {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0b0b0b;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+.koelnimage-detail-image-frame img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+}
+
+.koelnimage-detail-info-col {
+    padding: 24px;
+    min-width: 0;
+}
+
+.koelnimage-detail-footer-controls {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.koelnimage-detail-footer-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 9999px;
+    border: 1px solid rgb(244 244 245);
+    background: rgba(255, 255, 255, 0.9);
+    color: rgb(39 39 42);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+    transition: transform 0.2s ease, background-color 0.2s ease;
+}
+
+.koelnimage-detail-footer-nav:hover {
+    transform: scale(1.05);
+    background: #fff;
+}
+
+.koelnimage-detail-footer-nav svg {
+    width: 26px;
+    height: 26px;
+    stroke-width: 2.3;
+}
+
+.koelnimage-detail-counter {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 74px;
+    border-radius: 9999px;
+    background: rgba(63, 63, 70, 0.78);
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: rgb(244 244 245);
+}
+
+@media (min-width: 1024px) {
+    .koelnimage-detail-media-col {
+        flex: 0 0 60% !important;
+        width: 60% !important;
+        max-width: 60% !important;
+        justify-content: flex-start;
+    }
+
+    .koelnimage-detail-info-col {
+        flex: 0 0 40% !important;
+        width: 40% !important;
+        max-width: 40% !important;
+    }
+
+    .koelnimage-detail-image-frame {
+        flex: 0 0 auto;
+        width: 100% !important;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        aspect-ratio: 3 / 2 !important;
+    }
+
+    .koelnimage-detail-image-frame img {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+    }
+}
+
+@media (max-width: 1023px) {
+    .koelnimage-detail-dialog {
+        width: min(96vw, 1080px);
+        height: min(90vh, 870px);
+    }
+
+    .koelnimage-detail-media-col {
+        padding: 12px;
+    }
+
+    .koelnimage-detail-image-frame {
+        margin-top: 30px;
+        margin-bottom: 30px;
+    }
+
+    .koelnimage-detail-info-col {
+        padding: 12px;
+    }
+}
+
+/*
+  Admin: Tabellen vs. Karten — Utilities per @apply einbinden, damit sie im Produktions-CSS
+  sicher vorkommen (kein Purge-Risiko für lg:block / lg:hidden).
+*/
+/* Admin: Bild-Mediathek */
+.admin-image-library-grid {
+    @apply grid grid-cols-2 gap-2.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6;
+}
+
+.admin-image-card {
+    @apply relative overflow-hidden rounded-xl border border-gray-200/80 bg-gray-900 shadow-sm transition hover:border-gray-300 hover:shadow-md;
+}
+
+.admin-image-card__check {
+    @apply absolute right-2 top-2 z-20 rounded-md bg-white/95 p-0.5 shadow;
+}
+
+.admin-image-card__thumb {
+    @apply relative aspect-square bg-gray-800 overflow-hidden;
+}
+
+.admin-image-card__id {
+    @apply absolute left-2 top-2 z-10 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-semibold text-white;
+}
+
+.admin-image-card__overlay {
+    @apply absolute inset-0 z-[5] flex flex-col justify-end bg-gradient-to-t from-black/80 via-black/20 to-transparent p-2 opacity-0 transition group-hover:opacity-100;
+}
+
+.admin-image-card__overlay-title {
+    @apply truncate text-[11px] font-medium text-white;
+}
+
+.admin-image-card__overlay-badges {
+    @apply mt-1 flex flex-wrap gap-1;
+}
+
+.admin-image-badge {
+    @apply inline-flex rounded-md bg-white/20 px-1.5 py-0.5 text-[9px] font-semibold text-white backdrop-blur-sm;
+}
+
+.admin-image-badge--ok {
+    @apply bg-emerald-500/90 text-white;
+}
+
+.admin-image-badge--star {
+    @apply bg-amber-500/90 text-white;
+}
+
+.admin-image-detail-overlay {
+    @apply fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-5;
+}
+
+.admin-image-detail-backdrop {
+    @apply absolute inset-0 bg-black/60 backdrop-blur-[2px];
+}
+
+.admin-image-detail-dialog {
+    @apply relative z-10 flex max-h-[min(94vh,920px)] w-full max-w-[1180px] flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5;
+}
+
+.admin-image-detail-header {
+    @apply shrink-0 border-b border-gray-200 bg-white px-4 py-3;
+}
+
+.admin-image-detail-header-row {
+    @apply flex flex-wrap items-center gap-2 min-w-0;
+}
+
+.admin-image-detail-id {
+    @apply rounded-md bg-gray-100 px-2 py-0.5 font-mono text-sm font-bold text-gray-800;
+}
+
+.admin-image-detail-nav {
+    @apply flex items-center gap-1;
+}
+
+.admin-image-detail-counter {
+    @apply min-w-[3.5rem] text-center text-xs font-medium tabular-nums text-gray-500;
+}
+
+.admin-image-detail-filename {
+    @apply min-w-0 flex-1 truncate text-sm font-semibold text-gray-800;
+}
+
+.admin-image-detail-sent-banner {
+    @apply flex shrink-0 items-center justify-center gap-2 bg-emerald-500 px-4 py-2.5 text-sm font-semibold text-white;
+}
+
+.admin-image-detail-loading,
+.admin-image-detail-error {
+    @apply p-10 text-center text-sm text-gray-500;
+}
+
+.admin-image-detail-error {
+    @apply text-red-700;
+}
+
+.admin-image-detail-body {
+    @apply grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[minmax(280px,34%)_1fr];
+}
+
+.admin-image-detail-sidebar {
+    @apply overflow-y-auto border-b border-gray-100 bg-[#f7f8fa] p-4 lg:border-b-0 lg:border-r;
+}
+
+.admin-image-detail-main {
+    @apply overflow-y-auto bg-white p-4 sm:p-6;
+}
+
+.admin-image-detail-preview-box {
+    @apply mb-4 rounded-xl border border-gray-200 bg-white p-2 shadow-sm;
+}
+
+.admin-image-detail-preview-wrap {
+    @apply relative overflow-hidden rounded-lg bg-[#111827];
+}
+
+.admin-image-detail-preview {
+    @apply block max-h-[min(42vh,360px)] w-full object-contain;
+}
+
+.admin-image-detail-preview--video {
+    @apply bg-black;
+}
+
+.admin-image-detail-edit-chip {
+    @apply absolute right-2 top-2 inline-flex items-center gap-1 rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-[#1d4ed8] shadow-md hover:bg-gray-50;
+}
+
+.admin-image-detail-preview-toggle {
+    @apply mt-2 grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1;
+}
+
+.admin-image-detail-preview-toggle-btn {
+    @apply rounded-md px-2 py-1.5 text-xs font-semibold text-gray-600 transition hover:text-gray-900;
+}
+
+.admin-image-detail-preview-toggle-btn.is-active {
+    @apply bg-[#2563eb] text-white shadow-sm;
+}
+
+.admin-image-detail-panel {
+    @apply mb-3 rounded-xl border border-gray-200 bg-white p-3 shadow-sm;
+}
+
+.admin-image-detail-panel--tech {
+    @apply mb-3;
+}
+
+.admin-image-detail-section-title {
+    @apply mb-2 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-gray-500;
+}
+
+.admin-image-detail-section-icon {
+    @apply text-sm leading-none;
+}
+
+.admin-image-detail-status-grid {
+    @apply mb-2.5 flex flex-wrap gap-1.5;
+}
+
+.admin-image-detail-status-pill {
+    @apply inline-flex rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-[10px] font-semibold text-gray-500;
+}
+
+.admin-image-detail-status-pill.is-ok {
+    @apply border-emerald-200 bg-emerald-50 text-emerald-800;
+}
+
+.admin-image-detail-toggle-row {
+    @apply grid grid-cols-1 gap-1.5 sm:grid-cols-3;
+}
+
+.admin-image-detail-feature-btn {
+    @apply rounded-lg border border-gray-200 bg-gray-50 px-2 py-2 text-xs font-semibold text-gray-700 transition hover:bg-gray-100 disabled:opacity-50;
+}
+
+.admin-image-detail-feature-btn.is-active {
+    @apply border-[#2563eb] bg-[#eff6ff] text-[#1d4ed8];
+}
+
+.admin-image-detail-tech-list {
+    @apply space-y-1.5 text-xs;
+}
+
+.admin-image-detail-tech-list dt {
+    @apply text-[10px] font-semibold uppercase tracking-wide text-gray-400;
+}
+
+.admin-image-detail-tech-list dd {
+    @apply text-gray-800 break-all;
+}
+
+.admin-image-detail-muted {
+    @apply text-xs text-gray-500;
+}
+
+.admin-image-detail-main-head {
+    @apply mb-4 flex items-center justify-between gap-2;
+}
+
+.admin-image-detail-edit-toggle {
+    @apply rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-[#1d4ed8] hover:bg-gray-50;
+}
+
+.admin-image-detail-save-msg {
+    @apply mb-3 rounded-lg px-3 py-2 text-xs font-medium;
+}
+
+.admin-image-detail-save-msg.is-ok {
+    @apply bg-emerald-50 text-emerald-800;
+}
+
+.admin-image-detail-save-msg.is-error {
+    @apply bg-red-50 text-red-800;
+}
+
+.admin-image-detail-fields {
+    @apply space-y-4;
+}
+
+.admin-image-detail-label {
+    @apply mb-1 block text-[11px] font-semibold uppercase tracking-wide text-gray-500;
+}
+
+.admin-image-detail-headline {
+    @apply text-lg font-bold leading-snug text-gray-900;
+}
+
+.admin-image-detail-text {
+    @apply whitespace-pre-wrap text-sm leading-relaxed text-gray-800;
+}
+
+.admin-image-detail-field-grid {
+    @apply grid gap-4 sm:grid-cols-2;
+}
+
+.admin-image-detail-hint {
+    @apply mt-0.5 text-[11px] text-[#2563eb];
+}
+
+.admin-image-detail-link {
+    @apply font-semibold text-[#1d4ed8] hover:underline;
+}
+
+.admin-image-detail-keywords {
+    @apply flex flex-wrap gap-1.5;
+}
+
+.admin-image-detail-keyword {
+    @apply inline-flex rounded-full bg-gray-800 px-2.5 py-0.5 text-[10px] font-medium text-white;
+}
+
+.admin-image-detail-input {
+    @apply block w-full rounded-lg border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-[#2563eb] focus:ring-[#2563eb];
+}
+
+.admin-image-detail-textarea {
+    @apply min-h-[120px] resize-y;
+}
+
+.admin-image-detail-form-actions {
+    @apply flex flex-wrap justify-end gap-2 pt-2;
+}
+
+.admin-image-detail-quick-links {
+    @apply mt-6 flex flex-wrap gap-2 border-t border-gray-100 pt-4;
+}
+
+.admin-image-detail-quick-link {
+    @apply inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 hover:bg-gray-50;
+}
+
+.admin-image-detail-quick-link--primary {
+    @apply border-[#2563eb] bg-[#2563eb] text-white hover:bg-[#1d4ed8];
+}
+
+.admin-image-detail-icon-btn {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-gray-200 bg-white text-lg text-gray-700 hover:bg-gray-50;
+}
+
+.admin-image-detail-footer {
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-gray-200 bg-[#f7f8fa] px-4 py-3;
+}
+
+.admin-image-detail-footer-nav,
+.admin-image-detail-footer-actions {
+    @apply flex flex-wrap gap-2;
+}
+
+.admin-image-detail-footer-btn {
+    @apply inline-flex items-center rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40;
+}
+
+.admin-image-detail-footer-btn--nav {
+    @apply min-w-[7.5rem] justify-center font-semibold;
+}
+
+.admin-image-detail-footer-btn--primary {
+    @apply border-[#2563eb] bg-[#2563eb] text-white hover:bg-[#1d4ed8];
+}
+
+.admin-image-editor-overlay {
+    @apply fixed inset-0 z-[250] flex flex-col bg-[#092E48] text-white;
+}
+
+.admin-image-editor-header {
+    @apply flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/10 px-4 py-3;
+}
+
+.admin-image-editor-header-left {
+    @apply flex min-w-0 flex-col gap-0.5;
+}
+
+.admin-image-editor-title {
+    @apply text-sm font-bold uppercase tracking-wide text-emerald-400;
+}
+
+.admin-image-editor-filename {
+    @apply truncate text-sm text-white/80;
+}
+
+.admin-image-editor-header-actions {
+    @apply flex flex-wrap items-center gap-2;
+}
+
+.admin-image-editor-btn {
+    @apply inline-flex items-center rounded-lg px-3 py-2 text-sm font-semibold transition;
+}
+
+.admin-image-editor-btn--ghost {
+    @apply border border-white/20 bg-white/5 text-white hover:bg-white/10;
+}
+
+.admin-image-editor-btn--primary {
+    @apply bg-emerald-500 text-white hover:bg-emerald-400 disabled:opacity-50;
+}
+
+.admin-image-editor-icon-btn {
+    @apply inline-flex h-9 w-9 items-center justify-center rounded-lg border border-white/20 text-lg hover:bg-white/10;
+}
+
+.admin-image-editor-body {
+    @apply grid min-h-0 flex-1 overflow-hidden grid-cols-1;
+    grid-template-rows: minmax(0, 1fr) minmax(0, min(42dvh, 22rem));
+}
+
+@media (min-width: 1024px) {
+    .admin-image-editor-body {
+        grid-template-columns: 16rem minmax(0, 1fr) minmax(21rem, 24rem);
+        grid-template-rows: minmax(0, 1fr);
+    }
+}
+
+.admin-image-editor-rail {
+    @apply hidden shrink-0 flex-col items-center gap-2 border-b border-white/10 bg-[#2a2a2a] p-3 lg:flex lg:border-b-0 lg:border-r;
+}
+
+.admin-image-editor-rail-title {
+    @apply w-full shrink-0 text-center text-[10px] font-bold uppercase tracking-wide text-white/45;
+}
+
+.admin-image-editor-rail-thumb {
+    @apply relative w-full shrink-0 overflow-hidden rounded-md border border-white/15 bg-black;
+}
+
+.admin-image-editor-rail-canvas {
+    @apply mx-auto block h-auto w-full max-w-full object-contain;
+}
+
+.admin-image-editor-rail-filename {
+    @apply w-full shrink-0 line-clamp-2 text-center text-[10px] leading-snug text-white/55;
+}
+
+.admin-image-editor-rail-link {
+    @apply shrink-0 text-center text-[10px] text-white/50 underline-offset-2 hover:text-white hover:underline;
+}
+
+.admin-image-editor-sidebar {
+    @apply overflow-y-auto border-b border-white/10 p-3 lg:border-b-0 lg:border-r;
+}
+
+.admin-image-editor-sidebar-title {
+    @apply mb-2 text-[10px] font-bold uppercase tracking-wide text-white/50;
+}
+
+.admin-image-editor-source-card {
+    @apply mb-3 rounded-lg border border-white/10 bg-white/5 p-2;
+}
+
+.admin-image-editor-source-thumb {
+    @apply relative mb-2 aspect-[4/3] overflow-hidden rounded-md bg-black;
+}
+
+.admin-image-editor-badge {
+    @apply absolute rounded px-1 py-0.5 text-[9px] font-bold uppercase;
+}
+
+.admin-image-editor-badge--source {
+    @apply left-1 top-1 bg-amber-500 text-black;
+}
+
+.admin-image-editor-badge--current {
+    @apply right-1 top-1 bg-sky-500 text-white;
+}
+
+.admin-image-editor-source-name {
+    @apply truncate text-[11px] text-white/70;
+}
+
+.admin-image-editor-muted {
+    @apply text-xs text-white/45;
+}
+
+.admin-image-editor-msg {
+    @apply mt-2 rounded-lg px-2 py-1.5 text-xs font-medium;
+}
+
+.admin-image-editor-msg.is-ok {
+    @apply bg-emerald-500/20 text-emerald-200;
+}
+
+.admin-image-editor-msg.is-error {
+    @apply bg-red-500/20 text-red-200;
+}
+
+.admin-image-editor-stage {
+    @apply flex min-h-[240px] items-center justify-center overflow-hidden bg-black p-3;
+}
+
+.admin-image-editor-canvas {
+    @apply block shadow-2xl;
+}
+
+.admin-image-editor-tools {
+    @apply overflow-y-auto border-t border-white/10 p-3 lg:border-l lg:border-t-0;
+}
+
+.admin-image-editor-tool-section {
+    @apply mb-4 border-b border-white/10 pb-4 last:border-0;
+}
+
+.admin-image-editor-tool-title {
+    @apply mb-2 text-[10px] font-bold uppercase tracking-wide text-white/50;
+}
+
+.admin-image-editor-aspect-grid {
+    @apply grid grid-cols-3 gap-1;
+}
+
+.admin-image-editor-aspect-btn {
+    @apply rounded-md border border-white/15 bg-white/5 px-2 py-1.5 text-xs font-semibold text-white/80 hover:bg-white/10;
+}
+
+.admin-image-editor-aspect-btn.is-active {
+    @apply border-emerald-400 bg-emerald-500/30 text-white;
+}
+
+.admin-image-editor-hint {
+    @apply mt-1 text-[10px] leading-snug text-white/40;
+}
+
+.admin-image-editor-btn-row {
+    @apply flex gap-2;
+}
+
+.admin-image-editor-range-label {
+    @apply mb-1 block text-[10px] text-white/60;
+}
+
+.admin-image-editor-range {
+    @apply mb-2 w-full accent-emerald-400;
+}
+
+.admin-image-editor-canvas-wrap {
+    /* Exakt Canvas-Größe – Crop-Overlay (inset-0) = nur das Bild, nicht die schwarze Fläche */
+    @apply relative inline-block shrink-0 leading-none;
+}
+
+.admin-image-editor-crop-overlay {
+    @apply pointer-events-none;
+}
+
+.admin-image-editor-crop-overlay.is-dragging {
+    @apply cursor-grabbing;
+}
+
+.admin-image-editor-crop-box {
+    @apply pointer-events-auto absolute box-border cursor-move border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.45)];
+}
+
+.admin-image-editor-crop-grid {
+    @apply pointer-events-none absolute inset-0;
+    background-image:
+        linear-gradient(to right, rgba(255, 255, 255, 0.45) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.45) 1px, transparent 1px);
+    background-size: 33.333% 100%, 100% 33.333%;
+}
+
+.admin-image-editor-crop-handle {
+    @apply absolute z-10 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#092E48] shadow;
+}
+
+.admin-image-editor-crop-handle.is-nw { @apply left-0 top-0 cursor-nwse-resize; }
+.admin-image-editor-crop-handle.is-n { @apply left-1/2 top-0 cursor-ns-resize; }
+.admin-image-editor-crop-handle.is-ne { @apply left-full top-0 cursor-nesw-resize; }
+.admin-image-editor-crop-handle.is-e { @apply left-full top-1/2 cursor-ew-resize; }
+.admin-image-editor-crop-handle.is-se { @apply left-full top-full cursor-nwse-resize; }
+.admin-image-editor-crop-handle.is-s { @apply left-1/2 top-full cursor-ns-resize; }
+.admin-image-editor-crop-handle.is-sw { @apply left-0 top-full cursor-nesw-resize; }
+.admin-image-editor-crop-handle.is-w { @apply left-0 top-1/2 cursor-ew-resize; }
+
+.admin-image-editor-filmstrip {
+    @apply flex shrink-0 gap-2 overflow-x-auto border-t border-white/10 bg-[#2a2a2a] px-3 py-2;
+    min-height: 5.5rem;
+}
+
+.admin-image-editor-filmstrip-item {
+    @apply shrink-0 overflow-hidden rounded border-2 border-transparent bg-black/40 transition hover:border-white/35;
+}
+
+.admin-image-editor-filmstrip-item.is-active {
+    @apply border-[#9dd337] ring-2 ring-[#9dd337]/35;
+}
+
+.admin-image-editor-filmstrip-thumb {
+    @apply block h-16 w-16 object-cover;
+}
+
+.admin-image-editor-filmstrip-fallback {
+    @apply flex h-16 w-16 items-center justify-center text-[10px] text-white/70;
+}
+
+.admin-image-editor-btn--save {
+    @apply border-0 bg-[#9dd337] py-3 text-sm font-bold text-[#1a1a1a] hover:bg-[#b8e85a] disabled:opacity-50;
+}
+
+.admin-image-editor-embedded-body {
+    @apply grid grid-cols-1 gap-0 lg:grid-cols-[1fr_280px];
+}
+
+.admin-image-editor-stage--embedded {
+    @apply min-h-[280px] bg-gray-900;
+}
+
+.admin-image-editor-tools--embedded {
+    @apply border-t border-gray-200 bg-gray-50 lg:border-l lg:border-t-0;
+}
+
+.admin-image-editor-btn--ghost-light {
+    @apply border border-gray-300 bg-white text-gray-800 hover:bg-gray-50;
+}
+
+.admin-image-editor-btn--primary-light {
+    @apply border border-[#092E48] bg-[#092E48] text-white hover:bg-[#0b3858] disabled:opacity-50;
+}
+
+.admin-image-editor-tool-title--light {
+    @apply text-gray-500;
+}
+
+.admin-image-editor-aspect-btn--light {
+    @apply border-gray-200 bg-white text-gray-700 hover:bg-gray-50;
+}
+
+.admin-image-editor-aspect-btn--light.is-active {
+    @apply border-[#092E48] bg-[#092E48]/10 text-[#092E48];
+}
+
+.admin-image-editor-hint--light {
+    @apply text-gray-400;
+}
+
+.admin-image-editor-range-label--light {
+    @apply text-gray-600;
+}
+
+.admin-image-editor-range--light {
+    @apply accent-[#092E48];
+}
+
+/* Dedizierte Editor-Seite: fest im Viewport, kein Seiten-Scroll */
+body.admin-body--fullscreen {
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+}
+
+.admin-image-editor-page {
+    @apply min-h-0 w-full min-w-0 flex-1 flex-col overflow-hidden bg-[#1e1e1e] text-white;
+    width: 100%;
+    max-width: none;
+    /* 1px-Lichtkante unter dem Admin-Menü – Trennung ohne grauen Spalt */
+    box-shadow: inset 0 1px 0 0 rgb(255 255 255 / 0.14);
+}
+
+.admin-image-editor-page .admin-image-editor-body {
+    @apply w-full min-w-0 overflow-hidden;
+}
+
+.admin-image-editor-page .admin-image-editor-tools {
+    @apply min-h-0 max-h-full overflow-y-auto overflow-x-hidden;
+}
+
+@media (max-width: 1023px) {
+    .admin-image-editor-page .admin-image-editor-stage {
+        grid-row: 1;
+        min-height: 0;
+    }
+
+    .admin-image-editor-page .admin-image-editor-tools {
+        grid-row: 2;
+    }
+}
+
+@media (min-width: 1024px) {
+    .admin-image-editor-page .admin-image-editor-stage {
+        grid-column: 2;
+        grid-row: 1;
+    }
+
+    .admin-image-editor-page .admin-image-editor-tools {
+        grid-column: 3;
+        grid-row: 1;
+    }
+
+    .admin-image-editor-page .admin-image-editor-rail {
+        grid-column: 1;
+        grid-row: 1;
+    }
+}
+
+.admin-image-editor-page .admin-image-editor-header {
+    @apply border-b border-white/10 bg-[#2a2a2a] shadow-[0_4px_12px_-4px_rgba(0,0,0,0.35)];
+}
+
+.admin-image-editor-page .admin-image-editor-title {
+    @apply text-white/90;
+}
+
+.admin-image-editor-page .admin-image-editor-filename {
+    @apply text-white/80;
+}
+
+.admin-image-editor-page .admin-image-editor-btn--primary {
+    @apply bg-white text-[#092E48] hover:bg-white/90 disabled:opacity-50;
+}
+
+.admin-image-editor-page .admin-image-editor-stage {
+    @apply min-h-0 flex-1 flex-col bg-[#111];
+}
+
+.admin-image-editor-page .admin-image-editor-stage-view {
+    @apply relative min-h-0 w-full flex-1 overflow-hidden;
+    min-height: 12rem;
+}
+
+.admin-image-editor-page .admin-image-editor-canvas {
+    @apply block max-w-none max-h-none;
+    width: auto;
+    height: auto;
+}
+
+.admin-image-editor-page .admin-image-editor-tools {
+    @apply border-white/10 bg-[#333];
+}
+
+.admin-image-editor-page .admin-image-editor-aspect-btn.is-active {
+    @apply border-[#9dd337] bg-[#9dd337]/20 text-white;
+}
+
+.admin-image-editor-page .admin-image-editor-range {
+    @apply accent-[#9dd337];
+}
+
+.admin-image-editor-page .admin-image-editor-tool-section--actions {
+    @apply sticky bottom-0 -mx-3 border-t border-white/10 bg-[#333] px-3 pb-1 pt-3;
+}
+
+@layer components {
+    .admin-table-cards-desktop {
+        @apply hidden lg:block px-4 py-3 sm:px-6 sm:py-4;
+    }
+    .admin-table-cards-mobile {
+        @apply block lg:hidden space-y-3 px-3 py-3 sm:px-4 sm:py-4;
+    }
 }

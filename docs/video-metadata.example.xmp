@@ -1,0 +1,42 @@
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+<rdf:Description rdf:about=""
+xmlns:dc="http://purl.org/dc/elements/1.1/"
+xmlns:Iptc4xmpCore="http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/">
+
+  <dc:title>
+    <rdf:Alt>
+      <rdf:li xml:lang="x-default">Brand in Lagerhalle in Kerpen schnell unter Kontrolle</rdf:li>
+    </rdf:Alt>
+  </dc:title>
+
+  <dc:description>
+    <rdf:Alt>
+      <rdf:li xml:lang="x-default">Einsatzkraefte der Feuerwehr loeschten den Brand in einer Lagerhalle in Kerpen. Verletzt wurde nach aktuellem Stand niemand.</rdf:li>
+    </rdf:Alt>
+  </dc:description>
+
+  <dc:subject>
+    <rdf:Bag>
+      <rdf:li>Feuerwehr</rdf:li>
+      <rdf:li>Brand</rdf:li>
+      <rdf:li>Kerpen</rdf:li>
+      <rdf:li>Einsatz</rdf:li>
+    </rdf:Bag>
+  </dc:subject>
+
+  <Iptc4xmpCore:City>Kerpen</Iptc4xmpCore:City>
+  <Iptc4xmpCore:Location>Lagerhalle Sindorfer Strasse</Iptc4xmpCore:Location>
+  <Iptc4xmpCore:CountryName>Deutschland</Iptc4xmpCore:CountryName>
+
+  <dc:date>2026-04-09T12:45:00+02:00</dc:date>
+
+  <dc:creator>
+    <rdf:Seq>
+      <rdf:li>Erftkreis News / Redaktion</rdf:li>
+    </rdf:Seq>
+  </dc:creator>
+
+</rdf:Description>
+</rdf:RDF>
+</x:xmpmeta>

@@ -18,11 +18,17 @@
                 <textarea name="notes" id="notes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48]">{{ old('notes') }}</textarea>
             </div>
             <div>
+                <label for="publication_domains" class="block text-sm font-medium text-gray-700">Web-Domains (Lizenz-Fundstellen)</label>
+                <textarea name="publication_domains" id="publication_domains" rows="3" placeholder="wdr.de&#10;koeln.de" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48] font-mono text-sm">{{ old('publication_domains') }}</textarea>
+                <p class="mt-1 text-xs text-gray-500">Eine Domain pro Zeile. Fund-URLs mit passender Domain → „lizenziert“.</p>
+            </div>
+            <div>
                 <label class="inline-flex items-center">
                     <input type="checkbox" name="active" value="1" {{ old('active', true) ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48] focus:ring-[#092E48]">
                     <span class="ml-2 text-sm text-gray-700">Aktiv</span>
                 </label>
             </div>
+            @can('admin.customers.billing_sensitive')
             <div class="border-t border-gray-200 pt-4 mt-4">
                 <h2 class="text-base font-semibold text-gray-900 mb-1">Externe Identifikatoren (optional)</h2>
                 <p class="text-sm text-gray-600 mb-3">Einmal pro Medienhaus – gelten für alle Versandziele dieser Organisation.</p>
@@ -45,6 +51,7 @@
                     </div>
                 </div>
             </div>
+            @endcan
             <div class="flex gap-3 pt-2">
                 <button type="submit" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-white bg-[#092E48] hover:bg-[#0b3858]">Anlegen</button>
                 <a href="{{ route('admin.customers.index') }}" class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-gray-300 text-gray-700 bg-white hover:bg-gray-50">Abbrechen</a>

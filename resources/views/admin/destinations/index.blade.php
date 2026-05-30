@@ -28,7 +28,9 @@
                         @if($d->type !== 'email')
                             <form action="{{ route('admin.destinations.test', $d) }}" method="POST" class="inline">@csrf<button type="submit" class="text-amber-600 hover:underline ml-1">Testen</button></form>
                         @endif
-                        <form action="{{ route($destroyRoute, array_merge($itemRouteParams, [$d])) }}" method="POST" class="inline" onsubmit="return confirm('Versandziel löschen?');">@csrf @method('DELETE')<button type="submit" class="text-red-600 hover:underline ml-1">Löschen</button></form>
+                        @can('admin.customers.delete')
+                            <form action="{{ route($destroyRoute, array_merge($itemRouteParams, [$d])) }}" method="POST" class="inline" onsubmit="return window.adminConfirmDelete(this)" data-delete-prompt="Versandziel löschen? Geben Sie zur Bestätigung „ja“ ein.">@csrf @method('DELETE')<button type="submit" class="text-red-600 hover:underline ml-1">Löschen</button></form>
+                        @endcan
                     </td>
                 </tr>
                 @empty

@@ -25,6 +25,10 @@ class MediaQualityCheck
             return null;
         }
 
+        if ($media->isVideoDerivedStillImage()) {
+            return null;
+        }
+
         $notes = [];
         $longEdge = $this->getLongEdge($media);
         $status = 'ok';

@@ -98,5 +98,24 @@ class NewsItemMediaDeliveryDownloadTest extends TestCase
         ]);
 
         $this->assertNull($media->resolveDeliveryDownloadRelativePath());
+        $this->assertNull($media->resolveEditorSourceRelativePath());
+    }
+
+    public function test_editor_source_uses_same_path_as_delivery_download(): void
+    {
+        Storage::disk('public')->put('orig/full.jpg', 'original-bytes');
+        Storage::disk('public')->put('derived/preview.webp', 'preview-bytes');
+
+        $media = new NewsItemMedia([
+            'type' => 'image',
+            'path' => 'orig/full.jpg',
+            'preview_path' => 'derived/preview.webp',
+        ]);
+
+        $this->assertSame(
+            $media->resolveDeliveryDownloadRelativePath(),
+            $media->resolveEditorSourceRelativePath(),
+        );
+        $this->assertSame('orig/full.jpg', $media->resolveEditorSourceRelativePath());
     }
 }

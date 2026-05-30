@@ -10,6 +10,7 @@
             <input type="text" name="name" id="name" value="{{ old('name') }}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48]">
             @error('name')<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@enderror
         </div>
+        @can('admin.customers.billing_sensitive')
         <div>
             <label for="buyer_reference" class="block text-sm font-medium text-gray-700">Kundennummer / Buyer Reference</label>
             <input type="text" name="buyer_reference" id="buyer_reference" value="{{ old('buyer_reference') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48]">
@@ -63,6 +64,7 @@
                 <textarea name="billing_notes" id="billing_notes" rows="3" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48]">{{ old('billing_notes') }}</textarea>
             </div>
         </div>
+        @endcan
         <div><label class="inline-flex items-center"><input type="checkbox" name="active" value="1" {{ old('active', true) ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48]"><span class="ml-2 text-sm">Aktiv</span></label></div>
         <div class="flex gap-3"><button type="submit" class="px-4 py-2 text-sm font-medium rounded-md text-white bg-[#092E48]">Anlegen</button><a href="{{ route('admin.customers.products.index', $customer) }}" class="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white">Abbrechen</a></div>
     </form>

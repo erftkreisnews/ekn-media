@@ -7,6 +7,7 @@
         @if (session('status'))<div class="mt-4 rounded-md bg-green-50 p-4"><p class="text-sm text-green-800">{{ session('status') }}</p></div>@endif
         @if (session('error'))<div class="mt-4 rounded-md bg-red-50 p-4"><p class="text-sm text-red-800">{{ session('error') }}</p></div>@endif
         @if(config('lexware.api_key'))
+            @can('admin.customers.billing_sensitive')
             <div class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 flex items-center justify-between gap-4">
                 <div>
                     <p class="text-sm font-medium text-gray-900">Lexware-Stand uebernehmen</p>
@@ -21,15 +22,16 @@
                     </button>
                 </form>
             </div>
+            @endcan
         @endif
         <form method="POST" action="{{ route('admin.customers.products.update', [$customer, $product]) }}" class="mt-6 bg-white rounded-lg border border-gray-200 shadow-sm p-6 space-y-4">
             @csrf
-            @method('PUT')
             <div>
                 <label for="name" class="block text-sm font-medium text-gray-700">Name *</label>
                 <input type="text" name="name" id="name" value="{{ old('name', $product->name) }}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48]">
                 @error('name')<p class="mt-1 text-sm text-red-600">{{ $message }}</p>@enderror
             </div>
+            @can('admin.customers.billing_sensitive')
             <div>
                 <label for="buyer_reference" class="block text-sm font-medium text-gray-700">Kundennummer / Buyer Reference</label>
                 <input type="text" name="buyer_reference" id="buyer_reference" value="{{ old('buyer_reference', $product->buyer_reference) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48]">
@@ -86,6 +88,7 @@
                     <p class="mt-3 text-xs text-gray-500">Lexware Kontakt-ID: {{ $product->lexware_contact_id ?: 'noch nicht zugeordnet' }}</p>
                 @endif
             </div>
+            @endcan
             <div>
                 <label class="inline-flex items-center">
                     <input type="checkbox" name="active" value="1" {{ old('active', $product->active) ? 'checked' : '' }} class="rounded border-gray-300 text-[#092E48] focus:ring-[#092E48]">

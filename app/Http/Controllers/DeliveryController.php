@@ -12,14 +12,16 @@ use App\Models\Product;
 use App\Models\RecipientConfirmation;
 use App\Services\ImageMetadataReader;
 use App\Services\ImageMetadataWriter;
+use App\Services\DeliveryTimelineBuilder;
 use App\Services\MediaStorage;
+use App\Services\VideoMetadataXmpService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
-use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
@@ -84,7 +86,7 @@ class DeliveryController extends Controller
         }
     }
 
-    public function show(string $token): View|RedirectResponse
+    public function show(string $token): Response|RedirectResponse
     {
         $delivery = $this->findDelivery($token);
         if (! $delivery) {
@@ -138,7 +140,17 @@ class DeliveryController extends Controller
         }
 
         $newsItem = $delivery->newsItem;
-        $newsItem->load(['media']);
+        // PATCH: add statements and updates support for news items
+        $newsItem->load(['media', 'parentNewsItem']);
+        if (Schema::hasTable('news_item_statements') && Schema::hasTable('news_item_updates')) {
+            $newsItem->load([
+                'statements' => fn ($q) => $q->latest('received_at')->latest('id'),
+                'updates' => fn ($q) => $q->latest('happened_at')->latest('id'),
+            ]);
+        } else {
+            $newsItem->setRelation('statements', collect());
+            $newsItem->setRelation('updates', collect());
+        }
 
         if ($delivery->allowed_organization_id) {
             $organizations = Organization::where('id', $delivery->allowed_organization_id)->orderBy('name')->get();
@@ -148,8 +160,60 @@ class DeliveryController extends Controller
             $productsByOrg = collect();
         }
 
-        $allowedMedia = $newsItem->media->where('versand', true)->values();
+        $allowedMedia = $newsItem->media
+            ->where('versand', true)
+            ->filter(fn (NewsItemMedia $m) => $m->isVisibleInDeliveryPackage($delivery))
+            ->values();
+        $newMediaIds = [];
+        $newMediaCounts = [
+            'images' => 0,
+            'videos' => 0,
+            'audios' => 0,
+        ];
+        if ($delivery->is_update_delivery) {
+            $newMedia = $allowedMedia;
+            if ($delivery->update_baseline_delivery_at) {
+                $baseline = $delivery->update_baseline_delivery_at;
+                $newMedia = $allowedMedia
+                    ->filter(fn (NewsItemMedia $m) => $m->created_at && $m->created_at->gt($baseline))
+                    ->values();
+            }
+            $newMediaIds = $newMedia->pluck('id')->map(fn ($id) => (int) $id)->all();
+            $newMediaCounts = [
+                'images' => $newMedia->where('type', 'image')->count(),
+                'videos' => $newMedia->where('type', 'video')->count(),
+                'audios' => $newMedia->where('type', 'audio')->count(),
+            ];
+            $allowedMedia = $allowedMedia
+                ->sortByDesc(fn (NewsItemMedia $m) => in_array((int) $m->id, $newMediaIds, true))
+                ->values();
+        }
+        $updateReferenceNewsId = $newsItem->parentNewsItem?->display_news_id ?? $newsItem->display_news_id;
+        $rootNewsItemId = (int) ($newsItem->parent_news_item_id ?: $newsItem->id);
+        $firstReportDelivery = Delivery::query()
+            ->where('recipient_email', $delivery->recipient_email)
+            ->where('news_item_id', $rootNewsItemId)
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->orderByDesc('created_at')
+            ->first();
+        $latestUpdateDelivery = Delivery::query()
+            ->where('recipient_email', $delivery->recipient_email)
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->whereHas('newsItem', function ($q) use ($rootNewsItemId) {
+                $q->where('parent_news_item_id', $rootNewsItemId);
+            })
+            ->orderByDesc('created_at')
+            ->first();
+        $firstReportUrl = $firstReportDelivery && (string) $firstReportDelivery->id !== (string) $delivery->id
+            ? route('delivery.show', ['token' => $firstReportDelivery->token])
+            : null;
+        $latestUpdateUrl = $latestUpdateDelivery && (string) $latestUpdateDelivery->id !== (string) $delivery->id
+            ? route('delivery.show', ['token' => $latestUpdateDelivery->token])
+            : null;
         $downloadUrls = [];
+        $videoXmpDownloadUrls = [];
         $streamUrls = [];
         $mediaStorage = app(MediaStorage::class);
         $streamExpiry = now()->addMinutes(10);
@@ -159,14 +223,25 @@ class DeliveryController extends Controller
                 $streamExpiry,
                 ['token' => $delivery->token, 'media' => $media->id]
             );
+            $signedStreamUrl = URL::temporarySignedRoute(
+                'delivery.stream',
+                $streamExpiry,
+                ['token' => $delivery->token, 'media' => $media->id]
+            );
+            if ($media->isImage()) {
+                $streamUrls[$media->id] = $signedStreamUrl;
+            }
             if ($media->isVideo() || $media->isAudio()) {
                 $relPath = $media->resolveDeliveryDownloadRelativePath();
                 $presigned = $relPath
                     ? $mediaStorage->temporaryPlaybackUrlForPath($relPath, $streamExpiry)
                     : null;
                 // S3: direkter Browser-Download vom Storage (schnell). Sonst Laravel-Stream (gleiche Origin).
-                $streamUrls[$media->id] = $presigned ?? URL::temporarySignedRoute(
-                    'delivery.stream',
+                $streamUrls[$media->id] = $presigned ?? $signedStreamUrl;
+            }
+            if ($media->isVideo()) {
+                $videoXmpDownloadUrls[$media->id] = URL::temporarySignedRoute(
+                    'delivery.download.video-xmp',
                     $streamExpiry,
                     ['token' => $delivery->token, 'media' => $media->id]
                 );
@@ -179,16 +254,29 @@ class DeliveryController extends Controller
             ['token' => $delivery->token]
         );
 
-        return view('deliveries.show', [
+        $view = view('deliveries.show', [
             'delivery' => $delivery,
             'newsItem' => $newsItem,
             'organizations' => $organizations,
             'productsByOrg' => $productsByOrg,
             'allowedMedia' => $allowedMedia,
             'downloadUrls' => $downloadUrls,
+            'videoXmpDownloadUrls' => $videoXmpDownloadUrls,
             'streamUrls' => $streamUrls,
             'confirmUrl' => $confirmUrl,
+            'updateReferenceNewsId' => $updateReferenceNewsId,
+            'firstReportUrl' => $firstReportUrl,
+            'latestUpdateUrl' => $latestUpdateUrl,
+            'newMediaIds' => $newMediaIds,
+            'newMediaCounts' => $newMediaCounts,
+            'deliveryTimeline' => app(DeliveryTimelineBuilder::class)->build($newsItem),
         ]);
+
+        // Signed delivery links should never serve stale cached HTML.
+        return response($view)
+            ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->header('Pragma', 'no-cache')
+            ->header('Expires', '0');
     }
 
     public function confirm(Request $request, string $token): RedirectResponse
@@ -344,7 +432,10 @@ class DeliveryController extends Controller
         if (! $mediaModel) {
             abort(404, 'Medium nicht gefunden oder nicht freigegeben.');
         }
-        if (! $mediaModel->isVideo() && ! $mediaModel->isAudio()) {
+        if (! $mediaModel->isVisibleInDeliveryPackage($delivery)) {
+            abort(403, 'Dieses Medium ist für Ihre Redaktion nicht freigegeben.');
+        }
+        if (! $mediaModel->isVideo() && ! $mediaModel->isAudio() && ! $mediaModel->isImage()) {
             abort(404);
         }
 
@@ -362,9 +453,11 @@ class DeliveryController extends Controller
             abort(404, 'Datei nicht gefunden.');
         }
 
-        $filename = $mediaModel->original_name ?: basename($path);
+        // Für Inline-Stream ausschließlich einen ASCII-sicheren Dateinamen verwenden.
+        // original_name kann Umlaute/Sonderzeichen enthalten und so Header-Exceptions auslösen.
+        $safeInlineName = basename($path);
 
-        return $disk->response($path, $filename, [
+        return $disk->response($path, $safeInlineName, [
             'Accept-Ranges' => 'bytes',
         ]);
     }
@@ -382,6 +475,9 @@ class DeliveryController extends Controller
         if (! $mediaModel) {
             abort(404, 'Medium nicht gefunden oder nicht freigegeben.');
         }
+        if (! $mediaModel->isVisibleInDeliveryPackage($delivery)) {
+            abort(403, 'Dieses Medium ist für Ihre Redaktion nicht freigegeben.');
+        }
 
         $path = $mediaModel->resolveDeliveryDownloadRelativePath();
         if ($path === null) {
@@ -397,15 +493,10 @@ class DeliveryController extends Controller
         $hashes = $this->hashIpUa();
         $this->recordDeliveryDownloadEvent($delivery, $mediaModel, $hashes);
 
-        // Sicherstellen, dass Bild-Metadaten in der ausgelieferten Datei eingebettet sind
+        // Sicherstellen, dass Bild-Metadaten in der ausgelieferten Datei eingebettet sind (inkl. UTF-8, Headline, Schlagwörter)
         if (method_exists($mediaModel, 'isImage') && $mediaModel->isImage()) {
-            $written = ImageMetadataWriter::write($fullPath, [
-                'image_title' => $mediaModel->image_title,
-                'photographer' => $mediaModel->photographer,
-                'caption' => $mediaModel->caption,
-                'credit' => config('newsdesk.iptc_credit', 'Erftkreis News'),
-                'copyright' => config('newsdesk.iptc_copyright', '© Erftkreis News. Alle Rechte vorbehalten.'),
-            ]);
+            $mediaModel->loadMissing('newsItem');
+            $written = ImageMetadataWriter::write($fullPath, $mediaModel->resolvedIptcForEmbed());
 
             // Debug-Log: Welche IPTC-Daten liegen direkt vor dem Download in der Datei?
             $debugMeta = ImageMetadataReader::read($fullPath);
@@ -426,6 +517,43 @@ class DeliveryController extends Controller
         }
 
         return $response;
+    }
+
+    public function downloadVideoXmp(string $token, int $media): BinaryFileResponse
+    {
+        $delivery = $this->findDelivery($token);
+        if (! $delivery) {
+            abort(404, 'Versand nicht gefunden.');
+        }
+        $this->ensureValidDelivery($delivery);
+        $this->touchAccess($delivery, false);
+
+        $mediaModel = $delivery->newsItem->media()->where('id', $media)->where('versand', true)->first();
+        if (! $mediaModel) {
+            abort(404, 'Medium nicht gefunden oder nicht freigegeben.');
+        }
+        if (! $mediaModel->isVisibleInDeliveryPackage($delivery)) {
+            abort(403, 'Dieses Medium ist für Ihre Redaktion nicht freigegeben.');
+        }
+        if (! $mediaModel->isVideo()) {
+            abort(404, 'XMP ist nur für Video verfügbar.');
+        }
+
+        $xmpContent = app(VideoMetadataXmpService::class)->generateForVideoMedia($mediaModel);
+        $videoName = $mediaModel->original_name ?: basename((string) $mediaModel->path);
+        $baseName = pathinfo($videoName, PATHINFO_FILENAME);
+        $downloadName = ($baseName !== '' ? $baseName : 'video').'.xmp';
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'video-xmp-');
+        if ($tmpFile === false) {
+            abort(500, 'Temporäre XMP-Datei konnte nicht erstellt werden.');
+        }
+
+        file_put_contents($tmpFile, $xmpContent);
+
+        return response()->download($tmpFile, $downloadName, [
+            'Content-Type' => 'application/rdf+xml; charset=UTF-8',
+        ])->deleteFileAfterSend(true);
     }
 
     /**
@@ -459,6 +587,12 @@ class DeliveryController extends Controller
             'ua_hash' => $hashes['ua_hash'],
             'created_at' => now(),
         ];
+
+        // Freitext-Angaben vom Versand mitspiegeln (z. B. wenn noch keine org/product-IDs gesetzt sind).
+        if (Schema::hasColumn('delivery_events', 'self_reported_organization_name')) {
+            $payload['self_reported_organization_name'] = $delivery->self_reported_organization_name;
+            $payload['self_reported_product_name'] = $delivery->self_reported_product_name;
+        }
 
         // Snapshot-Spalten nur, wenn Migrationen auf der DB gelaufen sind (sonst 42S22).
         if (Schema::hasColumn('delivery_events', 'download_media_type')) {

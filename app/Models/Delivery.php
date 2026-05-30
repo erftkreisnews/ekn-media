@@ -14,6 +14,7 @@ class Delivery extends Model
     protected $keyType = 'string';
 
     protected $fillable = [
+        'brand_id',
         'news_item_id',
         'recipient_email',
         'token',
@@ -25,6 +26,8 @@ class Delivery extends Model
         'organization_id',
         'product_id',
         'allowed_organization_id',
+        'is_update_delivery',
+        'update_baseline_delivery_at',
         'self_reported_organization_name',
         'self_reported_product_name',
         'ip_hash',
@@ -38,6 +41,8 @@ class Delivery extends Model
         'first_opened_at' => 'datetime',
         'last_access_at' => 'datetime',
         'confirmed_at' => 'datetime',
+        'is_update_delivery' => 'boolean',
+        'update_baseline_delivery_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -55,6 +60,11 @@ class Delivery extends Model
     public function newsItem(): BelongsTo
     {
         return $this->belongsTo(NewsItem::class);
+    }
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
     }
 
     public function organization(): BelongsTo
@@ -95,5 +105,24 @@ class Delivery extends Model
     public function isValid(): bool
     {
         return ! $this->isExpired() && ! $this->isRevoked();
+    }
+
+    /**
+     * Kontext für Medien-Sichtbarkeit (Medienpaket-Link, Download, Stream, FTP-Ziel).
+     *
+     * @return array{unconfirmed: bool, organization_id: int|null, self_reported_only: bool}
+     */
+    public function mediaDeliveryViewerContext(): array
+    {
+        $unconfirmed = $this->confirmed_at === null;
+        $selfReportedOnly = $this->confirmed_at !== null
+            && $this->organization_id === null
+            && (filled($this->self_reported_organization_name) || filled($this->self_reported_product_name));
+
+        return [
+            'unconfirmed' => $unconfirmed,
+            'organization_id' => $this->organization_id,
+            'self_reported_only' => $selfReportedOnly,
+        ];
     }
 }

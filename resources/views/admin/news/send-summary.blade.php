@@ -17,7 +17,7 @@
                         <br>
                     @endif
                     @if($lastFtpFiles > 0)
-                        In diesem Schritt wurde ein FTP-/SFTP-Upload mit <strong>{{ $lastFtpFiles }}</strong> Dateien durchgeführt.
+                        In diesem Schritt wurde ein FTP-/SFTP-Upload mit <strong>{{ $lastFtpFiles }}</strong> markierten Medien durchgeführt.
                     @endif
                 @else
                     Für diese Nachricht liegen bereits Versandvorgänge vor (siehe unten).
@@ -32,15 +32,28 @@
                     <dt>E-Mail-Versände (Token-Mails):</dt>
                     <dd><strong>{{ $totalEmailDeliveries }}</strong></dd>
                 </div>
-                <div class="flex justify-between">
-                    <dt>FTP-/SFTP-Uploads (Läufe):</dt>
-                    <dd><strong>{{ $totalFtpRuns }}</strong></dd>
+                <div class="flex justify-between gap-4">
+                    <dt>FTP-/SFTP-Läufe (Versandziele/Zähler):</dt>
+                    <dd class="shrink-0"><strong>{{ $totalFtpRuns }}</strong></dd>
                 </div>
-                <div class="flex justify-between">
-                    <dt>In FTP-/SFTP-Läufen übertragene Dateien:</dt>
-                    <dd><strong>{{ $totalFtpFiles }}</strong></dd>
+                <div class="flex justify-between gap-4">
+                    <dt>Medien dieser Meldung (in mindestens einem Lauf vorgesehen):</dt>
+                    <dd class="shrink-0"><strong>{{ $totalFtpDistinctMedia }}</strong></dd>
                 </div>
+                <div class="flex justify-between gap-4">
+                    <dt>Upload-Einträge gesamt (alle Läufe):</dt>
+                    <dd class="shrink-0"><strong>{{ $totalFtpRunItems }}</strong></dd>
+                </div>
+                @if($totalFtpSuccessfulItems !== $totalFtpRunItems)
+                <div class="flex justify-between gap-4">
+                    <dt>Davon erfolgreich übertragen:</dt>
+                    <dd class="shrink-0"><strong>{{ $totalFtpSuccessfulItems }}</strong></dd>
+                </div>
+                @endif
             </dl>
+            <p class="mt-2 text-xs text-gray-500">
+                „Upload-Einträge“ zählen pro <em>Lauf</em> und <em>Medium</em> (z.&nbsp;B. mehrere Ziele = mehrere Läufe = höhere Zahl als eindeutige Medien). Keine Zählung der Sidecar-Datei <code>delivery.meta.json</code>.
+            </p>
         </div>
 
         <form method="POST" action="{{ route('admin.news.send-summary.apply', $newsItem) }}" class="border-t border-gray-200 pt-4 space-y-4">

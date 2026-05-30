@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
+use App\Support\AdminPermissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -84,20 +85,29 @@ class CustomerController extends Controller
 
     private function validateCustomer(Request $request): array
     {
-        $validated = $request->validate([
+        $rules = [
             'name' => ['required', 'string', 'max:255'],
             'notes' => ['nullable', 'string', 'max:5000'],
+            'publication_domains' => ['nullable', 'string', 'max:8000'],
             'active' => ['boolean'],
-            'external_reference_label' => ['nullable', 'string', 'max:255'],
-            'external_author_id' => ['nullable', 'string', 'max:255'],
-            'external_supplier_id' => ['nullable', 'string', 'max:255'],
-            'external_vendor_code' => ['nullable', 'string', 'max:255'],
-        ]);
+        ];
+
+        if ($request->user()?->can(AdminPermissions::CUSTOMERS_BILLING_SENSITIVE)) {
+            $rules['external_reference_label'] = ['nullable', 'string', 'max:255'];
+            $rules['external_author_id'] = ['nullable', 'string', 'max:255'];
+            $rules['external_supplier_id'] = ['nullable', 'string', 'max:255'];
+            $rules['external_vendor_code'] = ['nullable', 'string', 'max:255'];
+        }
+
+        $validated = $request->validate($rules);
         $validated['active'] = $request->boolean('active', true);
-        $validated['external_reference_label'] = $request->filled('external_reference_label') ? trim($request->input('external_reference_label')) : null;
-        $validated['external_author_id'] = $request->filled('external_author_id') ? trim($request->input('external_author_id')) : null;
-        $validated['external_supplier_id'] = $request->filled('external_supplier_id') ? trim($request->input('external_supplier_id')) : null;
-        $validated['external_vendor_code'] = $request->filled('external_vendor_code') ? trim($request->input('external_vendor_code')) : null;
+
+        if ($request->user()?->can(AdminPermissions::CUSTOMERS_BILLING_SENSITIVE)) {
+            $validated['external_reference_label'] = $request->filled('external_reference_label') ? trim($request->input('external_reference_label')) : null;
+            $validated['external_author_id'] = $request->filled('external_author_id') ? trim($request->input('external_author_id')) : null;
+            $validated['external_supplier_id'] = $request->filled('external_supplier_id') ? trim($request->input('external_supplier_id')) : null;
+            $validated['external_vendor_code'] = $request->filled('external_vendor_code') ? trim($request->input('external_vendor_code')) : null;
+        }
 
         return $validated;
     }

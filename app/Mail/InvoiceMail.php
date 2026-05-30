@@ -21,6 +21,7 @@ class InvoiceMail extends Mailable
         public Invoice $invoice,
         public string $pdfContent,
         public string $pdfFilename,
+        public bool $isCorrectionResend = false,
     ) {}
 
     public function envelope(): Envelope
@@ -34,7 +35,7 @@ class InvoiceMail extends Mailable
                 (string) ($mailConfig['from_name'] ?? 'Erftkreis News Rechnung')
             ),
             subject: $invoiceNumber !== ''
-                ? 'Rechnung '.$invoiceNumber
+                ? ($this->isCorrectionResend ? 'Korrektur zu Rechnung '.$invoiceNumber : 'Rechnung '.$invoiceNumber)
                 : 'Ihre Rechnung von '.config('invoice.sender.name', config('app.name', 'EKN')),
         );
     }
@@ -67,6 +68,7 @@ class InvoiceMail extends Mailable
                 'senderName' => config('invoice.sender.name', config('app.name', 'EKN')),
                 'paymentDays' => $paymentDays,
                 'dueDate' => $dueDate,
+                'isCorrectionResend' => $this->isCorrectionResend,
             ],
         );
     }

@@ -3,11 +3,10 @@
     <div class="px-6 py-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
         <h2 class="text-base font-semibold text-gray-900">Audios</h2>
         <div class="flex items-center gap-2 flex-wrap">
-            <label class="inline-flex items-center gap-2 text-sm text-gray-600">
-                <input type="file" name="audios[]" accept="audio/*" multiple
-                    class="block text-sm text-gray-600 file:mr-2 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:font-medium file:bg-[#092E48] file:text-white hover:file:bg-[#0b3858]">
-                <span>Keine Dateien ausgewählt.</span>
+            <label for="newsCreateAudiosFile" class="inline-flex items-center justify-center px-3 py-1.5 text-sm font-medium rounded text-white bg-[#092E48] hover:bg-[#0b3858] cursor-pointer">
+                Audiodateien wählen
             </label>
+            <span id="newsCreateAudiosFileHint" class="text-sm text-gray-600">Keine Dateien ausgewählt.</span>
             <span class="text-sm text-gray-500">Mit „Speichern“ werden die Audios der Nachricht zugeordnet.</span>
         </div>
     </div>

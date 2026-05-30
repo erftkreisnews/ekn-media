@@ -11,14 +11,14 @@
             @endif
         </div>
         <div class="flex flex-wrap items-center gap-2 mb-2">
-            @if($item->images->count() > 0)
-                <x-portal.badge variant="info">Foto</x-portal.badge>
+            @if($item->publicPortalImages()->count() > 0)
+                <x-portal.badge variant="info">Foto verfügbar</x-portal.badge>
             @endif
-            @if($item->videos->count() > 0)
-                <x-portal.badge variant="info">Video</x-portal.badge>
+            @if($item->publicPortalVideos()->count() > 0)
+                <x-portal.badge variant="info">Video verfügbar</x-portal.badge>
             @endif
-            @if($item->audios->count() > 0)
-                <x-portal.badge variant="info">Audio</x-portal.badge>
+            @if($item->publicPortalAudios()->count() > 0)
+                <x-portal.badge variant="info">Audio verfügbar</x-portal.badge>
             @endif
         </div>
         <div class="bg-ekn-900 -mx-4 px-4 py-3">
@@ -31,22 +31,31 @@
         </div>
     </header>
     <div class="p-4 flex flex-col sm:flex-row gap-4">
-        @if($item->teaser_image)
+        @if($item->teaser_image_for_public)
             <div class="shrink-0 w-[180px] sm:w-[200px]">
-                <a href="{{ route('news.show', $item->slug) }}" class="block relative overflow-hidden rounded-lg border border-gray-200 aspect-[3/2]">
+                <a href="{{ route('news.show', $item->slug) }}" aria-label="Beitrag öffnen: {{ $item->title }}" class="block relative overflow-hidden rounded-lg border border-gray-200 aspect-[3/2]">
+                    <span class="sr-only">Beitrag öffnen: {{ $item->title }}</span>
                     @php
-                        $teaserImageUrl = $item->teaser_image->thumb_url ?: $item->teaser_image->preview_url;
+                        $teaserImageUrl = $item->teaser_image_for_public->thumb_url ?: $item->teaser_image_for_public->preview_url;
+                        $teaserAlt = trim((string) ($item->teaser_image_for_public->display_name ?? $item->teaser_image_for_public->image_title ?? ''));
+                        $teaserContextAlt = trim(implode(' – ', array_filter([
+                            $item->title,
+                            $item->location_label,
+                            $item->teaser_image_for_public->caption ?? null,
+                        ])));
+                        $teaserAltFinal = $teaserAlt !== '' ? $teaserAlt : ($teaserContextAlt !== '' ? $teaserContextAlt : $item->title);
                     @endphp
                     @if($teaserImageUrl)
                     <img
                         src="{{ $teaserImageUrl }}"
-                        alt="{{ $item->teaser_image->display_name }}"
+                        alt="{{ $teaserAltFinal }}"
                         class="w-full h-full object-cover"
-                        loading="eager"
-                        decoding="sync"
+                        loading="{{ isset($loop) && $loop->first ? 'eager' : 'lazy' }}"
+                        @if(isset($loop) && $loop->first) fetchpriority="high" @endif
+                        decoding="async"
                     >
                     <span class="absolute inset-0 flex items-center justify-center pointer-events-none" aria-hidden="true">
-                        <img src="{{ asset('images/erftkreis-news-logo.png') }}?v=2" alt="" class="max-w-[14%] max-h-[14%] w-auto h-auto object-contain opacity-[0.35]">
+                        <img src="{{ asset('images/erftkreis-news-logo.png') }}?v=2" alt="" aria-hidden="true" class="max-w-[14%] max-h-[14%] w-auto h-auto object-contain opacity-[0.35]">
                     </span>
                     @else
                     <div class="w-full h-full flex items-center justify-center text-slate-400 text-xs bg-slate-100">Bild wird vorbereitet</div>

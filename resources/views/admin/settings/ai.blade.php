@@ -27,7 +27,7 @@
         <div>
             <a href="{{ route('admin.settings.index') }}" class="text-sm text-gray-600 hover:text-[#092E48] mb-2 inline-block">← Einstellungen</a>
             <h1 class="text-2xl font-semibold text-gray-900">KI / ChatGPT</h1>
-            <p class="mt-1 text-sm text-gray-600">OpenAI-Anbindung für automatische Bild-Metadaten (Titel, Bildunterschrift, Schlagwörter). API-Key kommt aus .env.</p>
+            <p class="mt-1 text-sm text-gray-600">OpenAI-Anbindung für Bild-Metadaten und optional für die Überarbeitung des Web-Textes bei Meldungen. API-Key kommt aus .env.</p>
         </div>
 
         @if (session('ai_test_ok'))
@@ -38,6 +38,16 @@
         @if (session('ai_test_error'))
             <div class="rounded-md bg-red-50 p-4 border border-red-200">
                 <p class="text-sm text-red-800">{{ session('ai_test_error') }}</p>
+            </div>
+        @endif
+        @if (session('ai_prompt_saved'))
+            <div class="rounded-md bg-green-50 p-4 border border-green-200">
+                <p class="text-sm text-green-800">{{ session('ai_prompt_saved') }}</p>
+            </div>
+        @endif
+        @if (session('ai_prompt_error'))
+            <div class="rounded-md bg-red-50 p-4 border border-red-200">
+                <p class="text-sm text-red-800">{{ session('ai_prompt_error') }}</p>
             </div>
         @endif
 
@@ -126,7 +136,48 @@
                     <dt class="text-sm text-gray-500">Retries</dt>
                     <dd class="text-sm text-gray-700">{{ $config['retries'] ?? '–' }}</dd>
                 </div>
+                <div class="py-3 flex justify-between gap-4 items-center">
+                    <dt class="text-sm text-gray-500">Text-Modell (Web-Text)</dt>
+                    <dd class="text-sm font-medium text-gray-900 font-mono">{{ $newsAiTextModel ?? '–' }}</dd>
+                </div>
             </dl>
+        </div>
+
+        {{-- Leit-Prompt Web-Text --}}
+        <div class="bg-white rounded-2xl ring-1 ring-slate-200 overflow-hidden shadow-sm">
+            <div class="px-6 py-4 border-b border-gray-200">
+                <h2 class="text-sm font-semibold tracking-wide text-gray-900 uppercase">Leit-Prompt: Web-Text (Meldungen)</h2>
+                <p class="mt-1 text-xs text-gray-500">
+                    Systemanweisung für „Web-Text mit KI überarbeiten“ auf Neu/Bearbeiten-Meldung. Leeres Feld speichern = Standard aus <code class="text-[11px] bg-gray-100 px-1 rounded">config/news_ai.php</code> (Vorschau unten).
+                    Der Standard verlangt einen <span class="font-medium text-gray-700">Vorlagenblock</span> mit Zeilen wie
+                    <code class="text-[11px] bg-gray-100 px-1 rounded">Titel:</code>,
+                    <code class="text-[11px] bg-gray-100 px-1 rounded">Webtext:</code> usw., damit im nächsten Schritt
+                    <span class="font-medium text-gray-700">Nachricht aufteilen</span> alle Felder füllen kann.
+                </p>
+            </div>
+            <form method="POST" action="{{ route('admin.settings.ai.news-web-text-prompt') }}" class="px-6 py-4 space-y-4">
+                @csrf
+                <div>
+                    <label for="news_web_text_ai_system_prompt" class="block text-sm font-medium text-gray-700 mb-1">EKN-Leit-Prompt</label>
+                    <textarea
+                        name="news_web_text_ai_system_prompt"
+                        id="news_web_text_ai_system_prompt"
+                        rows="14"
+                        class="block w-full rounded-lg border-gray-300 shadow-sm focus:border-[#092E48] focus:ring-[#092E48] text-sm font-mono"
+                        placeholder="Leer lassen für Standard-Prompt aus der Konfiguration …"
+                    >{{ old('news_web_text_ai_system_prompt', $newsWebTextSystemPrompt ?? '') }}</textarea>
+                    @error('news_web_text_ai_system_prompt')
+                        <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                    @enderror
+                </div>
+                <p class="text-xs text-gray-500">
+                    <span class="font-medium text-gray-700">Standard (Auszug):</span>
+                    {{ $newsAiDefaultPromptPreview ?? '' }}@if(\Illuminate\Support\Str::length((string) config('news_ai.default_system_prompt')) > 400)…@endif
+                </p>
+                <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-xl bg-[#092E48] text-white hover:bg-[#0b3858] ring-1 ring-slate-200">
+                    Speichern
+                </button>
+            </form>
         </div>
     </div>
 @endsection

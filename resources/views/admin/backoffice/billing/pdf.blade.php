@@ -174,8 +174,20 @@
         'honorar' => 'Honorar',
     ];
     $vatRate = (float) ($payment['vat_rate'] ?? 7);
-    $displayVat = (float) ($invoice->total_vat ?: round((float) $invoice->total_net * $vatRate / 100, 2));
-    $displayGross = (float) ($invoice->total_gross ?: round((float) $invoice->total_net + $displayVat, 2));
+    $displayNet = (float) $invoice->total_net;
+    $displayVat = round($displayNet * $vatRate / 100, 2);
+    $displayGross = round($displayNet + $displayVat, 2);
+    $isTag24Invoice = str_contains(mb_strtolower((string) ($product->name ?? '')), 'tag24')
+        || str_contains(mb_strtolower((string) ($organization->name ?? '')), 'tag24');
+    $usedDates = $usageRecords->pluck('used_at')->filter()->sort()->values();
+    $periodStart = $usedDates->first();
+    $periodEnd = $usedDates->last();
+    $usageDateLabel = '–';
+    if ($periodStart && $periodEnd) {
+        $usageDateLabel = $periodStart->isSameDay($periodEnd)
+            ? $periodStart->format('d.m.Y')
+            : $periodStart->format('d.m.Y').' – '.$periodEnd->format('d.m.Y');
+    }
 @endphp
 
 @php
@@ -197,9 +209,6 @@
                 @if($product->billing_name && $product->billing_name !== $product->billing_company)
                     <p>{{ $product->billing_name }}</p>
                 @endif
-                @if($contact?->name)
-                    <p>{{ $contact->name }}</p>
-                @endif
                 @if($product->billing_street)
                     <p>{{ $product->billing_street }}</p>
                 @endif
@@ -220,9 +229,9 @@
             </div>
             <div class="header-meta">
                 <p><strong>Rechnungsnr.:</strong> {{ $invoice->voucher_number ?: 'Entwurf-' . $invoice->id }}</p>
-                <p><strong>Kundennr.:</strong> {{ $product->buyer_reference ?: '–' }}</p>
+                <p><strong>Kundennr.:</strong> {{ $product->resolvedBuyerReference() ?: '–' }}</p>
                 <p><strong>Datum:</strong> {{ optional($invoice->voucher_date)->format('d.m.Y') ?: '–' }}</p>
-                <p><strong>Lieferdatum:</strong> {{ optional($usageRecords->first()?->used_at)->format('d.m.Y') ?: '–' }}</p>
+                <p><strong>Nutzungsdatum:</strong> {{ $usageDateLabel }}</p>
                 <p><strong>Kunde:</strong> {{ $organization->name }}</p>
                 <p><strong>{{ $headerReferenceLabel }}:</strong> {{ $headerReferenceCode !== '' ? $headerReferenceCode : '–' }}</p>
                 <p><strong>Redaktion:</strong> {{ $product->name }}</p>
@@ -231,34 +240,68 @@
     </tr>
 </table>
 
-<div class="address-notes">
-    <p class="small muted">Lokaler EKN-Rechnungsentwurf</p>
-    <p class="small muted">Keine Lexware-Übertragung</p>
-    <p class="small muted">Keine finale Lexware-Rechnungsnummer</p>
-</div>
-
 <div class="section post-address">
     <p>Sehr geehrte Damen und Herren,</p>
     <p style="margin-top: 6px;">hiermit berechne ich die nachfolgend dokumentierten journalistischen Nutzungen.</p>
 </div>
 
-@foreach($previewSections as $section)
+@if($isTag24Invoice)
     <div class="section">
-        <div class="section-title">{{ $section['title'] }}</div>
-        <div class="section-fields">
-            @foreach($section['fields'] as $field)
-                <p @if($field['label'] === 'Credits') style="margin-top: 8px;" @endif>
-                    <strong>{{ $field['label'] }}:</strong>
-                    @if($field['value'] === 'noch nicht gepflegt')
-                        <span class="missing">{{ $field['value'] }}</span>
-                    @else
-                        {{ $field['value'] }}
-                    @endif
-                </p>
+        <div class="section-title">Materialankauf</div>
+        <table class="positions-table" style="margin-top: 8px;">
+            <thead>
+            <tr>
+                <th style="width: 5%;">#</th>
+                <th style="width: 35%;">Anlass</th>
+                <th style="width: 10%;">Format</th>
+                <th style="width: 28%;">Link</th>
+                <th style="width: 10%;">Nutzungsdatum</th>
+                <th style="width: 12%;">Credits</th>
+            </tr>
+            </thead>
+            <tbody>
+            @foreach($previewSections as $index => $section)
+                @php
+                    $fieldMap = collect($section['fields'])->pluck('value', 'label');
+                    $link = (string) ($fieldMap['Link'] ?? 'noch nicht gepflegt');
+                @endphp
+                <tr>
+                    <td>{{ $index + 1 }}</td>
+                    <td>{{ $fieldMap['Anlass'] ?? 'noch nicht gepflegt' }}</td>
+                    <td>{{ $fieldMap['Format'] ?? 'noch nicht gepflegt' }}</td>
+                    <td>
+                        @if($link !== 'noch nicht gepflegt')
+                            <span>{{ $link }}</span>
+                        @else
+                            <span class="missing">noch nicht gepflegt</span>
+                        @endif
+                    </td>
+                    <td>{{ $fieldMap['Nutzungsdatum'] ?? 'noch nicht gepflegt' }}</td>
+                    <td>{{ $fieldMap['Credits'] ?? 'noch nicht gepflegt' }}</td>
+                </tr>
             @endforeach
-        </div>
+            </tbody>
+        </table>
     </div>
-@endforeach
+@else
+    @foreach($previewSections as $section)
+        <div class="section">
+            <div class="section-title">{{ $section['title'] }}</div>
+            <div class="section-fields">
+                @foreach($section['fields'] as $field)
+                    <p @if($field['label'] === 'Credits') style="margin-top: 8px;" @endif>
+                        <strong>{{ $field['label'] }}:</strong>
+                        @if($field['value'] === 'noch nicht gepflegt')
+                            <span class="missing">{{ $field['value'] }}</span>
+                        @else
+                            {{ $field['value'] }}
+                        @endif
+                    </p>
+                @endforeach
+            </div>
+        </div>
+    @endforeach
+@endif
 
 <table class="positions-table">
     <thead>
@@ -274,24 +317,72 @@
     <tbody>
     @forelse($usageRecords as $index => $record)
         @php
-            $quantity = (int) $record->images_count > 0 ? (int) $record->images_count : (float) $record->video_minutes;
+            $quantity = (int) $record->images_count > 0
+                ? (int) $record->images_count
+                : ((float) $record->video_minutes > 0 ? (float) $record->video_minutes : (float) $record->radio_minutes);
             $unit = (int) $record->images_count > 0 ? 'Stueck' : 'Minuten';
             $unitPrice = (int) $record->images_count > 0 ? (float) $record->price_per_image : (float) $record->price_per_minute;
             $section = $previewSections[$index] ?? null;
+            $isTag24Tier = $isTag24Invoice && ((int) $record->images_count > 0);
+            $wdrTierPdf = $wdrNewsroomImageTier ?? null;
+            $isWdrNsTierPdf = $wdrTierPdf && \App\Services\Billing\WdrNewsroomImageTierLines::appliesTo($record, $invoice) && (int) $record->images_count > 0;
         @endphp
-        <tr>
-            <td>{{ $index + 1 }}</td>
-            <td>
-                <div>{{ $section['line_item_title'] ?? ($billingTypeLabels[$record->billing_type] ?? 'Abrechnungsposition') }}</div>
-                @if(!empty($section['line_item_subtitle']))
-                    <div class="subtitle">{{ $section['line_item_subtitle'] }}</div>
-                @endif
-            </td>
-            <td class="number">{{ number_format((float) $quantity, (fmod((float) $quantity, 1.0) === 0.0 ? 0 : 1), ',', '.') }}</td>
-            <td class="number">{{ $unit }}</td>
-            <td class="money">{{ number_format($unitPrice, 2, ',', '.') }}</td>
-            <td class="money">{{ number_format((float) $record->total_amount, 2, ',', '.') }}</td>
-        </tr>
+        @if($isTag24Tier)
+            @php $additionalImages = max(0, (int) $record->images_count - 1); @endphp
+            <tr>
+                <td>{{ $index + 1 }}</td>
+                <td>
+                    <div>Online-Nutzung Foto - 1. Bild</div>
+                    @if(!empty($section['line_item_subtitle']))
+                        <div class="subtitle">{{ $section['line_item_subtitle'] }}</div>
+                    @endif
+                </td>
+                <td class="number">1</td>
+                <td class="number">Stueck</td>
+                <td class="money">10,00</td>
+                <td class="money">10,00</td>
+            </tr>
+            @if($additionalImages > 0)
+                <tr>
+                    <td>{{ $index + 1 }}a</td>
+                    <td><div>Online-Nutzung Foto - Bilder ab 2</div></td>
+                    <td class="number">{{ $additionalImages }}</td>
+                    <td class="number">Stueck</td>
+                    <td class="money">5,00</td>
+                    <td class="money">{{ number_format($additionalImages * 5.0, 2, ',', '.') }}</td>
+                </tr>
+            @endif
+        @elseif($isWdrNsTierPdf)
+            @foreach($wdrTierPdf->linesForImageCount((int) $record->images_count) as $lineIdx => $line)
+                <tr>
+                    <td>{{ $index + 1 }}{{ $lineIdx > 0 ? chr(96 + $lineIdx) : '' }}</td>
+                    <td>
+                        <div>{{ $line['title'] }}</div>
+                        @if($lineIdx === 0 && !empty($section['line_item_subtitle']))
+                            <div class="subtitle">{{ $section['line_item_subtitle'] }}</div>
+                        @endif
+                    </td>
+                    <td class="number">{{ number_format((float) $line['quantity'], (fmod((float) $line['quantity'], 1.0) === 0.0 ? 0 : 1), ',', '.') }}</td>
+                    <td class="number">Stueck</td>
+                    <td class="money">{{ number_format((float) $line['unit_price'], 2, ',', '.') }}</td>
+                    <td class="money">{{ number_format((float) $line['line_total'], 2, ',', '.') }}</td>
+                </tr>
+            @endforeach
+        @else
+            <tr>
+                <td>{{ $index + 1 }}</td>
+                <td>
+                    <div>{{ $section['line_item_title'] ?? ($billingTypeLabels[$record->billing_type] ?? 'Abrechnungsposition') }}</div>
+                    @if(!empty($section['line_item_subtitle']))
+                        <div class="subtitle">{{ $section['line_item_subtitle'] }}</div>
+                    @endif
+                </td>
+                <td class="number">{{ number_format((float) $quantity, (fmod((float) $quantity, 1.0) === 0.0 ? 0 : 1), ',', '.') }}</td>
+                <td class="number">{{ $unit }}</td>
+                <td class="money">{{ number_format($unitPrice, 2, ',', '.') }}</td>
+                <td class="money">{{ number_format((float) $record->total_amount, 2, ',', '.') }}</td>
+            </tr>
+        @endif
     @empty
         <tr>
             <td colspan="6" style="text-align: center; padding: 16px 8px;">Diesem Entwurf sind aktuell keine Positionen zugeordnet.</td>
@@ -303,14 +394,14 @@
 <table class="totals">
     <tr>
         <td class="label">Zwischensumme (netto)</td>
-        <td class="value">{{ number_format((float) $invoice->total_net, 2, ',', '.') }}</td>
+        <td class="value">{{ number_format($displayNet, 2, ',', '.') }}</td>
     </tr>
     <tr>
         <td class="label">Umsatzsteuer {{ number_format($vatRate, 0, ',', '.') }} %</td>
         <td class="value">{{ number_format($displayVat, 2, ',', '.') }}</td>
     </tr>
     <tr>
-        <td class="label"><strong>Gesamtbetrag</strong></td>
+        <td class="label"><strong>Gesamtbetrag (Brutto)</strong><br><span style="font-size: 9px; font-weight: normal; color: #4b5563;">inkl. {{ number_format($vatRate, 0, ',', '.') }} % USt. – Zahlungsbetrag</span></td>
         <td class="value"><strong>{{ number_format($displayGross, 2, ',', '.') }}</strong></td>
     </tr>
 </table>

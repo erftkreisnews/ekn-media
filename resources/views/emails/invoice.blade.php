@@ -23,17 +23,24 @@
                         </h1>
 
                         <p style="font-size: 14px; color: #4b5563; margin: 0 0 16px 0;">
-                            sehr geehrte Damen und Herren,
+                            Sehr geehrte Damen und Herren,
                         </p>
 
                         <p style="font-size: 14px; color: #4b5563; margin: 0 0 16px 0;">
-                            anbei erhalten Sie Ihre Rechnung fuer
+                            anbei erhalten Sie Ihre Rechnung für
                             {{ $organization?->name ?? 'den Kunden' }}
                             @if($product?->name)
                                 / {{ $product->name }}
                             @endif
                             als PDF-Anhang.
                         </p>
+
+                        @if(!empty($isCorrectionResend))
+                            <p style="font-size: 14px; color: #7c2d12; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 10px 12px; margin: 0 0 16px 0;">
+                                Hinweis: Bitte nutzen Sie ausschließlich das PDF im Anhang dieser E-Mail.
+                                Eine zuvor versendete Version hatte ein abweichendes Layout.
+                            </p>
+                        @endif
 
                         <table role="presentation" cellspacing="0" cellpadding="0" style="width: 100%; font-size: 13px; color: #374151; margin-bottom: 16px;">
                             <tr>
@@ -52,7 +59,7 @@
                                 <td style="padding: 4px 0; color: #6b7280;">Zahlungsziel</td>
                                 <td style="padding: 4px 0;">
                                     @if($dueDate)
-                                        zahlbar innerhalb von {{ $paymentDays }} Tagen netto, spaetestens bis {{ $dueDate->format('d.m.Y') }}
+                                        zahlbar innerhalb von {{ $paymentDays }} Tagen netto, spätestens bis {{ $dueDate->format('d.m.Y') }}
                                     @else
                                         zahlbar innerhalb von {{ $paymentDays }} Tagen netto
                                     @endif
@@ -67,11 +74,11 @@
                         </table>
 
                         <p style="font-size: 14px; color: #4b5563; margin: 0 0 16px 0;">
-                            Bitte geben Sie bei der Ueberweisung die Rechnungsnummer als Verwendungszweck an.
+                            Bitte geben Sie bei der Überweisung die Rechnungsnummer als Verwendungszweck an.
                         </p>
 
                         <p style="font-size: 14px; color: #4b5563; margin: 0;">
-                            Mit freundlichen Gruessen<br>
+                            Mit freundlichen Grüßen<br>
                             {{ $senderName }}
                         </p>
                     </td>

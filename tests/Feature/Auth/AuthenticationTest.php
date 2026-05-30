@@ -38,6 +38,9 @@ class AuthenticationTest extends TestCase
     {
         $user = User::factory()->create();
 
+        $this->app['config']->set('auth_local.enabled', true);
+        $this->app['config']->set('auth_local.allowed_emails', []);
+
         $this->post('/login', [
             'email' => $user->email,
             'password' => 'wrong-password',

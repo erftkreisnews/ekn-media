@@ -12,7 +12,9 @@ Es gibt **keine** automatische Veröffentlichung und **keine** Verknüpfung zur 
 4. Arbeitsseite **Schnitt / Sendefassung**: Clips auswählen, Reihenfolge setzen → `ProcessIngestRenderJob` (Queue).
 5. Render: `IngestRenderService` normalisiert jeden Clip (H.264/AAC, Zielparameter aus `config/ingest.php`), concat, lokale Ausgabe unter **rendered**.
 6. Finalisierung: `NewsItemMedia` anlegen, `MediaStorage::putFromLocalFile` + `generateMediaPath(…, 'sendefassung')`, danach `ExtractVideoMetadata` / `GenerateVideoPoster`.
-7. Lokale Render-Datei wird nach Erfolg gelöscht; optional Roh-Archiv (`INGEST_ARCHIVE_RAW_AFTER_SUCCESS`).
+7. Lokale Render-Datei wird nach Erfolg gelöscht; Rohclips in **processing** werden gelöscht (Standard) oder ins Archiv verschoben (`INGEST_ARCHIVE_RAW_AFTER_SUCCESS=true`).
+8. **Auto-Clear** (`INGEST_AUTO_CLEAR_AFTER_RENDER`, Standard an): übernommene Clips verschwinden aus Schnitt-Workspace und Sichtung; Vorschau/Poster lokal entfernt; Meldungs-Zuordnung am Ingest-Eintrag gelöst (Historie über `final_news_item_media_id`).
+9. Bei geschätzter Finalgröße &gt; `INGEST_OUTPUT_MAX_GIGABYTES` (Standard 0,9 GB): automatisch mehrere Sendefassungen (`_teil1_`, `_teil2_`, …) in einem Render-Lauf.
 
 Siehe auch: `docs/VIDEO_INGEST_ANALYSIS.md` (Bestandsanalyse).
 
@@ -53,7 +55,9 @@ Der Scan liest **nur** `config('ingest.paths.inbox')`. Die Ermittlung erfolgt ze
 | `INGEST_TMP_PATH` | Temp-Segmente / concat-Listen |
 | `INGEST_STABLE_INTERVAL` / `INGEST_STABLE_CHECKS` | Stabilitätscheck vor Import (Größe/Mtime) |
 | `INGEST_OUTPUT_*` | Bitrate, FPS, Auflösung (siehe `config/ingest.php`) |
-| `INGEST_ARCHIVE_RAW_AFTER_SUCCESS` | Nach erfolgreicher News-Anbindung Rohclips ins Archiv verschieben |
+| `INGEST_OUTPUT_MAX_GIGABYTES` | Max. geschätzte Größe pro Final-MP4 (Standard `0.9` → automatisch `…_teil2_…` bei vielen Clips) |
+| `INGEST_ARCHIVE_RAW_AFTER_SUCCESS` | `false` = Rohclips löschen (processing leer); `true` = nach `ingest/archive` verschieben |
+| `INGEST_AUTO_CLEAR_AFTER_RENDER` | Nach Finalrender Workspace leeren, Vorschau/Poster löschen, Meldungs-Link am Ingest-Eintrag lösen (Standard `true`) |
 
 Pfade sind **nicht** im Code fix verdrahtet, sondern über `config/ingest.php` und ENV.
 
@@ -62,13 +66,13 @@ Pfade sind **nicht** im Code fix verdrahtet, sondern über `config/ingest.php` u
 ```bash
 php artisan ingest:scan-inbox
 php artisan ingest:scan-upload
-php artisan ingest:cleanup [--tmp-max-age-hours=48] [--remove-completed-local-renders]
+php artisan ingest:cleanup [--tmp-max-age-hours=…] [--inbox-max-age-hours=…] [--failed-max-age-hours=…] [--remove-completed-local-renders]
 ```
 
 - **scan-inbox** / **scan-upload:** identische Logik; `scan-upload` ist ein Alias mit sprechendem Namen. Nur sinnvoll mit `INGEST_ENABLED=true` und existierender Migration + Quelle `mc60-default` (Seed in Migration).
-- **cleanup:** alte Dateien im Tmp-Ordner; optional Reste abgeschlossener Render-Pfade bereinigen.
+- **cleanup:** Inbox/Upload, Tmp und Failed: oberste Ebene, Dateien älter als konfigurierte Stunden (Standard 24h, siehe `INGEST_*_MAX_AGE_HOURS` in `config/ingest.php`); optional Reste abgeschlossener Render-Pfade bereinigen.
 
-Empfehlung: `ingest:scan-upload` (oder `ingest:scan-inbox`) per Cron (z. B. alle 2–5 Minuten) auf dem Server ausführen, wo die Inbox liegt.
+Empfehlung: `ingest:scan-upload` (oder `ingest:scan-inbox`) per Cron (z. B. alle 2–5 Minuten) auf dem Server ausführen, wo die Inbox liegt. `ingest:cleanup` ist für stündliches Aufräumen vorgesehen (Scheduler).
 
 ## Admin-Oberfläche
 

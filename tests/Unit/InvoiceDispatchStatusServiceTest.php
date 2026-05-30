@@ -59,6 +59,8 @@ class InvoiceDispatchStatusServiceTest extends TestCase
     {
         $invoice = $this->createInvoice([
             'buyer_reference' => '',
+        ], [], [
+            'buyer_reference' => null,
         ]);
 
         $status = app(InvoiceDispatchStatusService::class)->evaluate($invoice->fresh());
@@ -68,6 +70,20 @@ class InvoiceDispatchStatusServiceTest extends TestCase
         $this->assertTrue($status['can_finalize_lexware']);
         $this->assertSame('pending_lexware', $status['dispatch']['status']);
         $this->assertFalse($status['zugferd']['allowed']);
+    }
+
+    public function test_it_does_not_warn_when_organization_has_buyer_reference_only(): void
+    {
+        $invoice = $this->createInvoice([
+            'buyer_reference' => '',
+        ], [], [
+            'buyer_reference' => '10005',
+        ]);
+
+        $status = app(InvoiceDispatchStatusService::class)->evaluate($invoice->fresh());
+
+        $this->assertSame('ready', $status['status']);
+        $this->assertNotContains('Die Kundennummer bzw. Buyer Reference ist noch nicht gepflegt.', $status['warnings']);
     }
 
     public function test_it_marks_foreign_invoices_as_manual_review(): void
@@ -114,11 +130,26 @@ class InvoiceDispatchStatusServiceTest extends TestCase
         $this->assertTrue($status['zugferd']['allowed']);
     }
 
-    protected function createInvoice(array $productOverrides = [], array $invoiceOverrides = []): Invoice
+    public function test_it_blocks_dispatch_for_voided_lexware_invoices(): void
     {
-        $organization = Organization::create([
-            'name' => 'Westdeutscher Rundfunk',
+        $invoice = $this->createInvoice([], [
+            'lexware_invoice_id' => 'lex-123',
+            'voucher_number' => 'Re-2026030015',
+            'status' => 'lexware_voided',
         ]);
+
+        $status = app(InvoiceDispatchStatusService::class)->evaluate($invoice->fresh());
+
+        $this->assertSame('blocked', $status['status']);
+        $this->assertContains('Diese Rechnung wurde in Lexware storniert und darf nicht versendet werden.', $status['blockers']);
+        $this->assertFalse($status['dispatch']['can_send']);
+    }
+
+    protected function createInvoice(array $productOverrides = [], array $invoiceOverrides = [], array $organizationOverrides = []): Invoice
+    {
+        $organization = Organization::create(array_merge([
+            'name' => 'Westdeutscher Rundfunk',
+        ], $organizationOverrides));
 
         $product = Product::create(array_merge([
             'organization_id' => $organization->id,

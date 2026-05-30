@@ -18,6 +18,11 @@ class QueueWorkerHeartbeatJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    public function __construct()
+    {
+        $this->onQueue('heartbeat');
+    }
+
     public function handle(): void
     {
         Cache::put('queue_worker_heartbeat_at', now()->toIso8601String(), 300);

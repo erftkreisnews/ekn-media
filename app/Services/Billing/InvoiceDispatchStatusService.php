@@ -24,6 +24,7 @@ class InvoiceDispatchStatusService
         $usageRecordCount = $this->resolveUsageRecordCount($invoice);
         $hasForeignRecipient = $product ? $this->mapCountryCode($product->billing_country) !== 'DE' : false;
         $hasLexwareFinalization = $this->hasLexwareFinalization($invoice);
+        $isLexwareVoided = $this->isLexwareVoided($invoice);
 
         if (! $organization) {
             $blockers[] = 'Dem Entwurf ist kein Kunde zugeordnet.';
@@ -63,7 +64,7 @@ class InvoiceDispatchStatusService
                 $reviews[] = 'Die Rechnungsadresse liegt im Ausland. Steuerlogik und Versandfall bitte manuell prüfen.';
             }
 
-            if (trim((string) ($product->buyer_reference ?? '')) === '') {
+            if ($product->resolvedBuyerReference() === '') {
                 $warnings[] = 'Die Kundennummer bzw. Buyer Reference ist noch nicht gepflegt.';
             }
         }
@@ -80,6 +81,10 @@ class InvoiceDispatchStatusService
 
         if ((float) $invoice->total_net <= 0) {
             $warnings[] = 'Der Netto-Betrag ist 0 oder negativ. Bitte den Beleg fachlich prüfen.';
+        }
+
+        if ($isLexwareVoided) {
+            $blockers[] = 'Diese Rechnung wurde in Lexware storniert und darf nicht versendet werden.';
         }
 
         $sender = config('invoice.sender', []);
@@ -149,7 +154,7 @@ class InvoiceDispatchStatusService
             'badge_classes' => $this->badgeClassesForDispatchStatus($status),
             'summary' => $this->summaryForDispatchStatus($status, $readinessStatus),
             'messages' => $dispatchMessages,
-            'can_send' => in_array($status, ['ready', 'warning'], true),
+            'can_send' => in_array($status, ['ready', 'warning', 'sent'], true),
             'sent_at' => $sentAt,
         ];
     }
@@ -316,6 +321,18 @@ class InvoiceDispatchStatusService
     {
         return trim((string) ($invoice->lexware_invoice_id ?? '')) !== ''
             && trim((string) ($invoice->voucher_number ?? '')) !== '';
+    }
+
+    protected function isLexwareVoided(Invoice $invoice): bool
+    {
+        if (trim((string) ($invoice->status ?? '')) === 'lexware_voided') {
+            return true;
+        }
+
+        $meta = (array) ($invoice->meta ?? []);
+        $voucherStatus = mb_strtolower(trim((string) (data_get($meta, 'lexware_payment.voucher_status') ?? data_get($meta, 'lexware.voucher_status') ?? '')));
+
+        return $voucherStatus === 'voided';
     }
 
     protected function resolveSentAt(Invoice $invoice): ?string

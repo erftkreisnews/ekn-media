@@ -10,6 +10,7 @@ class Organization extends Model
     protected $fillable = [
         'name',
         'notes',
+        'publication_domains',
         'active',
         'buyer_reference',
         'lexware_contact_id',

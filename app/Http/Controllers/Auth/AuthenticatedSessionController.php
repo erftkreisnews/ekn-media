@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Support\AdminPermissions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -25,15 +26,16 @@ class AuthenticatedSessionController extends Controller
      */
     public function store(LoginRequest $request): RedirectResponse
     {
-        // Klassischen Passwort-Login standardmäßig deaktivieren.
-        // Optional können einzelne E-Mail-Adressen per config/auth_local.php freigeschaltet werden.
+        // E-Mail/Passwort: siehe config auth_local (LOCAL_LOGIN_*). Bei enabled + leerer Allowlist: alle Accounts.
         $allowed = false;
 
         if (config('auth_local.enabled')) {
             $allowedEmails = config('auth_local.allowed_emails', []);
-            $email = Str::lower($request->input('email', ''));
+            $email = Str::lower((string) $request->input('email', ''));
 
-            if ($email !== '' && in_array($email, $allowedEmails, true)) {
+            if ($allowedEmails === []) {
+                $allowed = true;
+            } elseif ($email !== '' && in_array($email, $allowedEmails, true)) {
                 $allowed = true;
             }
         }
@@ -50,8 +52,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        // Admins landen direkt im Admin-Dashboard (Nachrichten-Übersicht)
-        if ($request->user()->can('access_admin')) {
+        // Admins landen direkt im Admin-Dashboard
+        if ($request->user()->can(AdminPermissions::ACCESS)) {
             return redirect()->intended(route('admin.dashboard', absolute: false));
         }
 

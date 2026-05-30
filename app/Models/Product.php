@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Product extends Model
 {
     protected $fillable = [
+        'brand_id',
         'organization_id',
         'name',
         'active',
@@ -28,6 +29,11 @@ class Product extends Model
     protected $casts = [
         'active' => 'boolean',
     ];
+
+    public function brand(): BelongsTo
+    {
+        return $this->belongsTo(Brand::class);
+    }
 
     public function organization(): BelongsTo
     {
@@ -74,5 +80,20 @@ class Product extends Model
         ]);
 
         return implode(', ', $parts);
+    }
+
+    /**
+     * Kundennummer / Buyer Reference: zuerst Redaktion, sonst Medienhaus (Lexware-Stamm oft nur auf Organisationsebene gepflegt).
+     */
+    public function resolvedBuyerReference(): string
+    {
+        $direct = trim((string) ($this->buyer_reference ?? ''));
+        if ($direct !== '') {
+            return $direct;
+        }
+
+        $this->loadMissing('organization');
+
+        return trim((string) ($this->organization?->buyer_reference ?? ''));
     }
 }

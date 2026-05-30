@@ -37,6 +37,7 @@ class Contact extends Model
     public function getBillingLabelAttribute(): string
     {
         $scope = $this->product?->name ?: $this->organization?->name ?: null;
+        $displayName = trim((string) $this->name) !== '' ? $this->name : $this->email;
         $parts = array_filter([
             $scope,
             $this->getBillingDepartmentLabel(),
@@ -44,7 +45,7 @@ class Contact extends Model
         ]);
         $hint = $parts !== [] ? ' ('.implode(', ', $parts).')' : '';
 
-        return $this->name.$hint.' – '.$this->email;
+        return $displayName.$hint.' – '.$this->email;
     }
 
     public function getBillingDepartmentLabel(): ?string

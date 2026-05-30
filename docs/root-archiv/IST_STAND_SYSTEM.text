@@ -1,0 +1,119 @@
+IST-STAND SYSTEM (LARAVEL) - PROJEKTWEIT
+Projekt: Erftkreis News Media
+Stand: 2026-03-30
+Pfad: /usr/home/admin/public_html/media/laravel12
+
+============================================================
+1) GESAMTLAGE
+============================================================
+- Das Projekt ist produktiv in Betrieb.
+- Kernmodule:
+  - Oeffentliche News-Ausspielung inkl. SEO/Sitemaps
+  - Admin-Backoffice fuer News, Medien, Versand und Verwaltung
+  - Delivery-System (signierte Zustellung/Downloads)
+  - Bild-Redaction-Pipeline (Anonymisierung)
+  - Video-Ingest mit Finalrender
+  - Queue-/Cron-getriebene Hintergrundverarbeitung
+- Es gibt laufende Stabilitaets-/Qualitaetsanpassungen, aber keinen globalen Totalausfall.
+
+============================================================
+2) OEFFENTLICHER BEREICH
+============================================================
+- News-Liste und Detailseiten funktionieren inkl. URL-/Slug-Logik.
+- SEO-Bausteine aktiv (Canonical, Robots-Logik, Sitemap, News-Sitemap).
+- Delivery-Links sind signiert/zeitbegrenzt; Zugriffe werden protokolliert.
+
+============================================================
+3) ADMIN- UND BACKOFFICE-BEREICH
+============================================================
+- News-Anlage, Bearbeitung und Medienverwaltung aktiv.
+- Versandprozesse fuer E-Mail und FTP/SFTP aktiv.
+- Backoffice fuer Organisationen, Produkte, Kontakte, Usage, Billing verfuegbar.
+- Settings-Bereiche vorhanden (SEO, Backup, AI, Jobs/Heartbeats).
+
+============================================================
+4) REDACTION-SUBSYSTEM (BILDER) - AKTUELLER IST-STAND
+============================================================
+- Pipeline:
+  ProcessMediaRedaction (Laravel) -> detect_and_redact.py (Python) -> redacted Datei.
+- Statusmodell:
+  pending / done / failed / disabled / legacy(null)
+- Fail-safe:
+  Bei pending/failed keine ungeschuetzte oeffentliche Original-Auslieferung.
+
+4.1) Umgesetzte Aenderungen (global)
+- detect_and_redact.py wurde minimal und rueckwaertskompatibel gepatcht:
+  - PATCH: reduce false positives on uniform text
+  - strengere Plausibilitaet fuer Kennzeichen-Boxen
+  - Blur mit leichtem Inset (weniger Rand-/Nachbartexttreffer)
+  - optionaler OCR-Whitelist-Pfad fuer Woerter wie POLIZEI/FEUERWEHR
+  - OCR-loser Heuristik-Fallback aktiv, falls OCR-Stack fehlt
+- Outputformat fuer Laravel blieb unveraendert kompatibel.
+
+4.2) Laufzeitstatus OCR auf aktuellem Server
+- pytesseract: nicht installiert
+- tesseract binary: nicht vorhanden
+- Folge:
+  OCR-Wortausnahme ist vorbereitet, aber derzeit nicht aktiv.
+  Aktuell wirkt der Non-OCR-Fallback (Heuristikpfad).
+
+4.3) Bestandsdaten
+- Bereits erzeugte redacted-Dateien bleiben bestehen.
+- Neue Logik greift erst bei erneuter Redaction je Medium.
+- Deshalb sind Reprocess-Laeufe fuer Altbestaende notwendig.
+
+============================================================
+5) VIDEO-INGEST / FINALRENDER - AKTUELLER IST-STAND
+============================================================
+- Vorheriger 500-Fehler im Render-Flow (fehlende IngestTrimValidator-Klasse) wurde behoben.
+- Trim-Validierung und relevante Model-Felder sind im Pfad vorhanden.
+- Render/Upload funktioniert, sofern Queue-Worker laufen.
+
+============================================================
+6) QUEUE / CRON / BETRIEB
+============================================================
+- Mehrere Kernfunktionen sind asynchron (Redaction, Previews, Metadaten, Ingest-Render).
+- Typischer Betriebsengpass bleibt Worker-Verfuegbarkeit:
+  Wenn Worker stoppen/haengen, wirken Features "kaputt".
+- Empfehlung:
+  Supervisor (oder aequivalent) fuer dauerhaften Workerbetrieb + Healthchecks/Alerting.
+
+============================================================
+7) STORAGE- UND ARTEFAKT-LOGIK
+============================================================
+- Medien liegen in strukturierten Pfaden (Original/Derived/Redacted).
+- Oeffentliche Auslieferung orientiert sich am jeweiligen Redaction-Status.
+- Wichtig:
+  Codefixes aendern vergangene Artefakte nicht automatisch.
+
+============================================================
+8) RISIKEN (PROJEKTWEIT)
+============================================================
+- False Positives in Redaction sind reduziert, aber ohne OCR nicht voll semantisch aufloesbar.
+- Zu strenge Filter koennen echte Kennzeichen uebersehen (Recall-Risiko).
+- Altartefakte koennen den Eindruck erzeugen, ein Fix wirke nicht, obwohl nur Reprocess fehlt.
+
+============================================================
+9) EMPFOHLENE NAECHSTE SCHRITTE
+============================================================
+- Kurzfristig:
+  - kontrollierten Reprocess fuer betroffene Bildbestaende durchfuehren
+  - Sichtkontrolle ueber mehrere News, nicht nur Einzelfaelle
+- Mittelfristig:
+  - OCR-Stack installieren (tesseract + pytesseract)
+  - Whitelist-Woerter zentral konfigurierbar machen
+  - Logging "Box akzeptiert/verworfen" erweitern
+- Betrieb:
+  - Queue-Healthchecks, Alerting und Runbooks fuer Reprocessing etablieren
+
+============================================================
+10) AKTUELLE BEWERTUNG
+============================================================
+- Gesamtprojekt lauffaehig: JA
+- Kritischer globaler Blocker: NEIN
+- Redaction-False-Positive-Problem technisch adressiert: JA
+- Vollwirkung in Altbestaenden bereits sichtbar: NEIN (Reprocess erforderlich)
+
+============================================================
+ENDE DOKUMENT
+============================================================

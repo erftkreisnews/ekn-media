@@ -146,13 +146,23 @@ class SitemapController extends Controller
             $language = 'de';
         }
 
-        $news = NewsItem::query()
+        $baseQuery = NewsItem::query()
             ->publicVisible()
             ->whereNotNull('published_at')
+            ->orderByDesc('published_at');
+
+        $news = (clone $baseQuery)
             ->where('published_at', '>=', now()->subHours(48))
-            ->orderByDesc('published_at')
             ->limit(1000)
             ->get(['id', 'slug', 'title', 'keywords', 'published_at', 'updated_at']);
+
+        // Fallback: Wenn in den letzten 48h nichts publiziert wurde, die neuesten
+        // öffentlichen Meldungen ausliefern, damit die News-Sitemap nicht leer ist.
+        if ($news->isEmpty()) {
+            $news = (clone $baseQuery)
+                ->limit(1000)
+                ->get(['id', 'slug', 'title', 'keywords', 'published_at', 'updated_at']);
+        }
 
         $xml = '<?xml version="1.0" encoding="UTF-8"?>'."\n";
         $xml .= '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"';

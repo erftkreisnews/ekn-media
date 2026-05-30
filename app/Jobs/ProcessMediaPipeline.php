@@ -46,7 +46,9 @@ class ProcessMediaPipeline implements ShouldQueue
     protected function processImage(MediaAsset $media): void
     {
         $media->update([
-            'redaction_status' => NewsItemMedia::REDACTION_PENDING,
+            'redaction_status' => $media->shouldAutoRedact()
+                ? NewsItemMedia::REDACTION_PENDING
+                : NewsItemMedia::REDACTION_DISABLED,
         ]);
 
         try {
@@ -96,7 +98,7 @@ class ProcessMediaPipeline implements ShouldQueue
             ]);
         }
 
-        if ($media->redaction_status !== NewsItemMedia::REDACTION_DISABLED) {
+        if ($media->shouldAutoRedact()) {
             try {
                 ProcessMediaRedaction::dispatch($media);
             } catch (\Throwable $e) {
@@ -134,6 +136,14 @@ class ProcessMediaPipeline implements ShouldQueue
             GenerateVideoPoster::dispatch($media);
         } catch (\Throwable $e) {
             Log::warning('ProcessMediaPipeline: video poster dispatch failed', [
+                'media_id' => $media->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+        try {
+            GenerateVideoStills::dispatch($media);
+        } catch (\Throwable $e) {
+            Log::warning('ProcessMediaPipeline: video stills dispatch failed', [
                 'media_id' => $media->id,
                 'error' => $e->getMessage(),
             ]);
