@@ -31,25 +31,13 @@ class GenerateVideoStillsAspectRatioTest extends TestCase
         $this->assertStringContainsString('crop=2560:1707', $expr);
     }
 
-    private function ffmpegIntegrationEnabled(): bool
-    {
-        if (getenv('GITHUB_ACTIONS')) {
-            return false;
-        }
-
-        $ffmpeg = trim((string) config('media.ffmpeg_path', 'ffmpeg'));
-
-        return $ffmpeg !== '' && is_executable($ffmpeg);
-    }
-
     #[Test]
     public function extracted_jpeg_is_exactly_3x2_when_ffmpeg_available(): void
     {
-        if (! $this->ffmpegIntegrationEnabled()) {
-            $this->markTestSkipped('ffmpeg integration not available');
-        }
-
         $ffmpeg = trim((string) config('media.ffmpeg_path', 'ffmpeg'));
+        if ($ffmpeg === '' || ! is_executable($ffmpeg)) {
+            $this->markTestSkipped('ffmpeg not available');
+        }
 
         $src = sys_get_temp_dir().'/vs_32_test_'.uniqid('', true).'.mp4';
         $out = sys_get_temp_dir().'/vs_32_out_'.uniqid('', true).'.jpg';

@@ -11,23 +11,6 @@ use Tests\TestCase;
 
 class GenerateVideoStillsDurationProbeTest extends TestCase
 {
-    private static function ffmpegIntegrationEnabled(): bool
-    {
-        if (getenv('GITHUB_ACTIONS')) {
-            return false;
-        }
-
-        $ffmpeg = trim((string) config('media.ffmpeg_path', 'ffmpeg'));
-        if ($ffmpeg !== '' && is_executable($ffmpeg)) {
-            return true;
-        }
-
-        $p = new Process(['which', 'ffmpeg']);
-        $p->run();
-
-        return $p->isSuccessful();
-    }
-
     private static function ffmpegBinary(): string
     {
         $configured = trim((string) config('media.ffmpeg_path', 'ffmpeg'));
@@ -38,10 +21,17 @@ class GenerateVideoStillsDurationProbeTest extends TestCase
         return 'ffmpeg';
     }
 
+    private static function ffmpegIntegrationEnabled(): bool
+    {
+        $ffmpeg = self::ffmpegBinary();
+
+        return $ffmpeg !== '' && is_executable($ffmpeg);
+    }
+
     private static function makeTestMp4(string $path, int $seconds): void
     {
         $p = new Process([
-            'ffmpeg', '-y',
+            self::ffmpegBinary(), '-y',
             '-f', 'lavfi',
             '-i', 'color=c=green:s=320x240:d='.$seconds,
             '-c:v', 'libx264',
