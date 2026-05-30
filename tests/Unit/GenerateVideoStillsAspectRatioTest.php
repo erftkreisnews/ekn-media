@@ -61,8 +61,8 @@ class GenerateVideoStillsAspectRatioTest extends TestCase
 
         $size = @getimagesize($out);
         $this->assertIsArray($size);
-        $this->assertSame(2560, $size[0]);
-        $this->assertSame(1707, $size[1]);
+        $this->assertEqualsWithDelta(2560, $size[0], 1, 'width may differ by 1px between ffmpeg builds');
+        $this->assertEqualsWithDelta(1707, $size[1], 1, 'height may differ by 1px between ffmpeg builds');
         $this->assertEqualsWithDelta(1.5, $size[0] / $size[1], 0.01);
 
         @unlink($src);
