@@ -54,7 +54,7 @@ class GenerateVideoStillsDurationProbeTest extends TestCase
         }
 
         $path = sys_get_temp_dir().'/gen_vs_duration_test_'.uniqid('', true).'.mp4';
-        $expectedSeconds = 127;
+        $expectedSeconds = 10;
         try {
             self::makeTestMp4($path, $expectedSeconds);
         } catch (\RuntimeException $e) {

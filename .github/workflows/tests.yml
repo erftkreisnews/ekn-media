@@ -37,6 +37,7 @@ jobs:
       DB_PASSWORD: password
       FFMPEG_PATH: /usr/bin/ffmpeg
       FFPROBE_PATH: /usr/bin/ffprobe
+      FILESYSTEM_DISK: local
 
     steps:
       - name: Checkout
