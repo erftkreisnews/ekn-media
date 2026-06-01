@@ -476,7 +476,10 @@ class MediaStorage
 
             return false;
         } finally {
-            fclose($stream);
+            // S3/Flysystem schließt den Stream nach put() – erneutes fclose() würde TypeError werfen.
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
         }
     }
 
